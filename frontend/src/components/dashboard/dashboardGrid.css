@@ -1,0 +1,25 @@
+/* react-grid-layout base styles (positioning, transitions, resize handle) */
+@import 'react-grid-layout/css/styles.css';
+@import 'react-resizable/css/styles.css';
+
+/* Each RGL cell is a fixed-height, absolutely-positioned box; make its content fill it. */
+.rgl-tile {
+    display: flex;
+    height: 100%;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* The widget Card inside should stretch to fill the cell in both axes. */
+.rgl-tile > * {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+}
+
+/* Keep RGL's drag placeholder subtle and on-theme. */
+.react-grid-item.react-grid-placeholder {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    opacity: 0.6;
+}

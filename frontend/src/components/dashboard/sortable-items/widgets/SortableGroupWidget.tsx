@@ -1,7 +1,7 @@
 import { useDroppable } from '@dnd-kit/core';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Grid2 } from '@mui/material';
+import { Box } from '@mui/material';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import shortid from 'shortid';
 
@@ -877,12 +877,10 @@ export const SortableGroupWidget: React.FC<Props> = ({
 
     if (isOverlay) {
         return (
-            <Grid2
-                size={{ xs: 12, sm: 6, md: 6, lg: 4, xl: 4 }}
+            <Box
                 sx={{
                     opacity: 0.6,
-                    height: widgetHeight.sm,
-                    minHeight: widgetHeight.sm,
+                    height: '100%',
                     width: '100%',
                 }}
             >
@@ -901,15 +899,14 @@ export const SortableGroupWidget: React.FC<Props> = ({
                     maxItems={getMaxItems()}
                     showLabel={config?.showLabel !== undefined ? config.showLabel : true}
                 />
-            </Grid2>
+            </Box>
         );
     }
 
     return (
         <>
-            <Grid2
-                size={{ xs: 12, sm: 6, md: 6, lg: 4, xl: 4 }}
-                ref={(node) => {
+            <Box
+                ref={(node: HTMLDivElement | null) => {
                     groupWidgetRef.current = node;
                     setNodeRef(node);
                     setDroppableRef(node);
@@ -926,8 +923,8 @@ export const SortableGroupWidget: React.FC<Props> = ({
                     transitionProperty: isDragging ? 'none' : 'all',
                     transitionDuration: isDragging ? '0ms' : '250ms',
                     borderRadius: '8px',
-                    height: widgetHeight.sm,
-                    minHeight: widgetHeight.sm,
+                    height: '100%',
+                    width: '100%',
                     '& > div': {
                         height: '100%',
                         width: '100%',
@@ -966,7 +963,7 @@ export const SortableGroupWidget: React.FC<Props> = ({
                         showLabel={config?.showLabel !== undefined ? config.showLabel : true}
                     />
                 </div>
-            </Grid2>
+            </Box>
 
             {/* Modal for editing group items */}
             <CenteredModal
