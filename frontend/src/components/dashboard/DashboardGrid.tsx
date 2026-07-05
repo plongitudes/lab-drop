@@ -1,5 +1,5 @@
 import { Box, useMediaQuery } from '@mui/material';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import RGL, { WidthProvider, type Layout } from 'react-grid-layout';
 import shortid from 'shortid';
 
@@ -40,8 +40,12 @@ import {
     type Device,
 } from '../../constants/gridLayout';
 import { migrateFlowLayout } from '../../utils/migrateFlowLayout';
+import { resolveClusterSwap } from '../../utils/resolveClusterSwap';
 
 const GridLayout = WidthProvider(RGL);
+
+const rectsOverlap = (a: Layout, b: Layout): boolean =>
+    a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
 export const DashboardGrid: React.FC = () => {
     const [selectedItem, setSelectedItem] = useState<DashboardItem | null>(null);
@@ -96,6 +100,59 @@ export const DashboardGrid: React.FC = () => {
         setDashboardLayout(updated);
         saveLayout(updated);
     }, [items, setDashboardLayout, saveLayout]);
+
+    // Snapshot of the layout when a gesture begins, so a rejected drag/resize can snap back.
+    const preGestureLayout = useRef<DashboardItem[]>([]);
+    const snapshotLayout = useCallback(() => {
+        preGestureLayout.current = items;
+    }, [items]);
+
+    // Force react-grid-layout to reconcile back to the pre-gesture positions. RGL compares the
+    // incoming `layout` prop against the last one it saw; pushing the (moved) layout first makes
+    // that stored copy differ from the pre-gesture layout, so the revert actually re-syncs.
+    const revertGesture = useCallback((moved: DashboardItem[]) => {
+        setDashboardLayout(moved);
+        const preGesture = preGestureLayout.current;
+        setTimeout(() => setDashboardLayout(preGesture), 0);
+    }, [setDashboardLayout]);
+
+    // Drag drop: try a rigid cluster swap. On success persist it; on rejection snap back.
+    const handleDragStop = useCallback((_next: Layout[], _old: Layout, dropped: Layout) => {
+        const tiles = layout.map((l) => ({ id: l.i, x: l.x, y: l.y, w: l.w, h: l.h }));
+        const swap = resolveClusterSwap(tiles, dropped.i, dropped.x, dropped.y, cols);
+
+        if (swap) {
+            const updated = items.map((item) => {
+                const p = swap[item.id];
+                return p && item.layout ? { ...item, layout: { ...item.layout, x: p.x, y: p.y } } : item;
+            });
+            setDashboardLayout(updated);
+            saveLayout(updated);
+            return;
+        }
+
+        const moved = items.map((item) =>
+            item.id === dropped.i && item.layout
+                ? { ...item, layout: { ...item.layout, x: dropped.x, y: dropped.y } }
+                : item,
+        );
+        revertGesture(moved);
+    }, [layout, items, cols, setDashboardLayout, saveLayout, revertGesture]);
+
+    // Resize: reject a resize that would overlap another tile; otherwise persist.
+    const handleResizeStop = useCallback((next: Layout[], _old: Layout, resized: Layout) => {
+        const collides = next.some((l) => l.i !== resized.i && rectsOverlap(l, resized));
+        if (!collides) {
+            commitLayout(next);
+            return;
+        }
+        const moved = items.map((item) =>
+            item.id === resized.i && item.layout
+                ? { ...item, layout: { ...item.layout, w: resized.w, h: resized.h } }
+                : item,
+        );
+        revertGesture(moved);
+    }, [items, commitLayout, revertGesture]);
 
     const handleDelete = (id: string) => {
         const itemToDelete = dashboardLayout.find(item => item.id === id);
@@ -387,11 +444,13 @@ export const DashboardGrid: React.FC = () => {
                     containerPadding={GRID_CONTAINER_PADDING}
                     isDraggable={editMode}
                     isResizable={editMode}
-                    onDragStop={commitLayout}
-                    onResizeStop={commitLayout}
+                    onDragStart={snapshotLayout}
+                    onResizeStart={snapshotLayout}
+                    onDragStop={handleDragStop}
+                    onResizeStop={handleResizeStop}
                     draggableCancel='.MuiIconButton-root, .no-drag'
                     compactType={null}
-                    preventCollision
+                    allowOverlap
                     isBounded={false}
                 >
                     {items.map((item) => (
