@@ -16,16 +16,18 @@ export const SelectionActionBar: React.FC<Props> = ({ count, onCut, onCopy, onDe
         <Paper
             elevation={8}
             sx={{
+                // Sit in the header band (centered — the header's middle is empty), so the bar
+                // never covers the selection checkboxes of tiles in the top row.
                 position: 'fixed',
-                top: 74,
+                top: 9,
                 left: '50%',
                 transform: 'translateX(-50%)',
-                zIndex: 1250,
+                zIndex: 1300,
                 display: 'flex',
                 alignItems: 'center',
                 gap: 1,
                 px: 2,
-                py: 1,
+                py: 0.5,
                 borderRadius: 999,
                 backgroundColor: 'rgba(28, 28, 38, 0.96)',
                 backdropFilter: 'blur(6px)',
