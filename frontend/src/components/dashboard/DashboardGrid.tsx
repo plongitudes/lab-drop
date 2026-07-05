@@ -4,7 +4,9 @@ import RGL, { WidthProvider, type Layout } from 'react-grid-layout';
 import shortid from 'shortid';
 
 import './dashboardGrid.css';
+import { ClipboardTray } from './ClipboardTray';
 import { DashboardTile } from './DashboardTile';
+import { SelectionActionBar } from './SelectionActionBar';
 import { useAppContext } from '../../context/useAppContext';
 import { DashboardItem, ITEM_TYPE } from '../../types';
 import { AddEditForm } from '../forms/AddEditForm/AddEditForm';
@@ -26,7 +28,8 @@ import { resolveClusterSwap } from '../../utils/resolveClusterSwap';
 
 const GridLayout = WidthProvider(RGL);
 
-const rectsOverlap = (a: Layout, b: Layout): boolean =>
+type Box = { x: number; y: number; w: number; h: number };
+const rectsOverlap = (a: Box, b: Box): boolean =>
     a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
 export const DashboardGrid: React.FC = () => {
@@ -35,6 +38,11 @@ export const DashboardGrid: React.FC = () => {
     // Multi-select (edit mode only). Set of selected tile ids; scoped here so toggling it
     // re-renders this grid but not the memoized tiles (their polling widgets stay put).
     const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+    // Clipboard tray: tiles that were cut/copied out of the grid, awaiting placement.
+    const [trayItems, setTrayItems] = useState<DashboardItem[]>([]);
+    // Size of the tray chip currently being dragged onto the grid (drives RGL's drop placeholder).
+    const [dropSize, setDropSize] = useState<{ w: number; h: number }>({ w: 4, h: 2 });
+    const draggingTrayId = useRef<string | null>(null);
     const { dashboardLayout, setDashboardLayout, refreshDashboard, editMode, isAdmin, saveLayout } = useAppContext();
 
     // Match the breakpoint AppContextProvider uses to pick the desktop vs mobile array.
@@ -169,10 +177,106 @@ export const DashboardGrid: React.FC = () => {
         revertGesture(moved);
     }, [items, commitLayout, revertGesture]);
 
-    // Selection is an edit-mode concept only; clear it whenever edit mode turns off.
+    const handleDeselect = useCallback(() => setSelectedIds(new Set()), []);
+
+    // Cut: lift the selected tiles out of the grid into the tray (freeing their cells).
+    const handleCut = useCallback(() => {
+        const toCut = items.filter((i) => selectedIds.has(i.id));
+        if (!toCut.length) return;
+        setTrayItems((prev) => [...prev, ...toCut]);
+        const cutIds = new Set(toCut.map((i) => i.id));
+        const remaining = dashboardLayout.filter((i) => !cutIds.has(i.id));
+        setDashboardLayout(remaining);
+        saveLayout(remaining);
+        setSelectedIds(new Set());
+    }, [items, selectedIds, dashboardLayout, setDashboardLayout, saveLayout]);
+
+    // Copy: put fresh-id clones of the selected tiles in the tray; originals stay in place.
+    const handleCopy = useCallback(() => {
+        const clones = items
+            .filter((i) => selectedIds.has(i.id))
+            .map((i) => ({ ...(JSON.parse(JSON.stringify(i)) as DashboardItem), id: `item-${shortid.generate()}` }));
+        if (!clones.length) return;
+        setTrayItems((prev) => [...prev, ...clones]);
+        setSelectedIds(new Set());
+    }, [items, selectedIds]);
+
+    const handleDeleteSelected = useCallback(() => {
+        const ids = new Set(selectedIds);
+        if (!ids.size) return;
+        PopupManager.deleteConfirmation({
+            title: `Delete ${ids.size} item${ids.size > 1 ? 's' : ''}?`,
+            confirmAction: async () => {
+                const remaining = dashboardLayout.filter((i) => !ids.has(i.id));
+                setDashboardLayout(remaining);
+                saveLayout(remaining);
+                setSelectedIds(new Set());
+                ToastManager.success(`${ids.size} item${ids.size > 1 ? 's' : ''} deleted`);
+            },
+        });
+    }, [selectedIds, dashboardLayout, setDashboardLayout, saveLayout]);
+
+    // Place a tray item at a grid cell if it fits (in bounds, no overlap); returns success.
+    const placeTrayItem = useCallback((id: string, x: number, y: number): boolean => {
+        const item = trayItems.find((t) => t.id === id);
+        const size = item?.layout;
+        if (!item || !size) return false;
+        const box: Box = { x, y, w: size.w, h: size.h };
+        const inBounds = x >= 0 && y >= 0 && x + size.w <= cols;
+        const free = !items.some((i) => i.layout && rectsOverlap(i.layout, box));
+        if (!inBounds || !free) return false;
+        const updated = [...dashboardLayout, { ...item, layout: box }];
+        setDashboardLayout(updated);
+        saveLayout(updated);
+        setTrayItems((prev) => prev.filter((t) => t.id !== id));
+        return true;
+    }, [trayItems, items, cols, dashboardLayout, setDashboardLayout, saveLayout]);
+
+    const handleChipDragStart = useCallback((item: DashboardItem, e: React.DragEvent) => {
+        draggingTrayId.current = item.id;
+        if (item.layout) setDropSize({ w: item.layout.w, h: item.layout.h });
+        e.dataTransfer.setData('text/plain', item.id);
+        e.dataTransfer.effectAllowed = 'move';
+    }, []);
+
+    const handleChipDragEnd = useCallback(() => {
+        draggingTrayId.current = null;
+    }, []);
+
+    // RGL fires this when a tray chip is dropped onto the grid.
+    const handleGridDrop = useCallback((_layout: Layout[], dropItem: Layout) => {
+        const id = draggingTrayId.current;
+        draggingTrayId.current = null;
+        if (!id) return;
+        if (!placeTrayItem(id, dropItem.x, dropItem.y)) {
+            ToastManager.error('No room to place that there');
+        }
+    }, [placeTrayItem]);
+
+    // Return remaining tray items to the grid (stacked below all content) so nothing is lost.
+    const flushTrayToGrid = useCallback(() => {
+        if (!trayItems.length) return;
+        const boxes = dashboardLayout.map((i) => i.layout).filter(Boolean) as Box[];
+        let y = boxes.reduce((m, b) => Math.max(m, b.y + b.h), 0);
+        const appended = trayItems.map((item) => {
+            const w = item.layout?.w ?? 12;
+            const h = item.layout?.h ?? 3;
+            const placed = { ...item, layout: { x: 0, y, w, h } };
+            y += h;
+            return placed;
+        });
+        setDashboardLayout([...dashboardLayout, ...appended]);
+        saveLayout([...dashboardLayout, ...appended]);
+        setTrayItems([]);
+    }, [trayItems, dashboardLayout, setDashboardLayout, saveLayout]);
+
+    // Selection + tray are edit-mode concepts; clear selection and return tray items on exit.
     useEffect(() => {
-        if (!editMode) setSelectedIds(new Set());
-    }, [editMode]);
+        if (!editMode) {
+            setSelectedIds(new Set());
+            flushTrayToGrid();
+        }
+    }, [editMode, flushTrayToGrid]);
 
     const handleDelete = useCallback((id: string) => {
         const itemToDelete = dashboardLayout.find(item => item.id === id);
@@ -298,6 +402,10 @@ export const DashboardGrid: React.FC = () => {
                     compactType={null}
                     allowOverlap
                     isBounded={false}
+                    isDroppable={editMode}
+                    droppingItem={{ i: '__tray_drop__', w: dropSize.w, h: dropSize.h }}
+                    onDropDragOver={() => dropSize}
+                    onDrop={handleGridDrop}
                 >
                     {items.map((item) => {
                         const isSelected = editMode && selectedIds.has(item.id);
@@ -319,6 +427,23 @@ export const DashboardGrid: React.FC = () => {
                     })}
                 </GridLayout>
             </Box>
+
+            {editMode && (
+                <>
+                    <SelectionActionBar
+                        count={selectedIds.size}
+                        onCut={handleCut}
+                        onCopy={handleCopy}
+                        onDelete={handleDeleteSelected}
+                        onDeselect={handleDeselect}
+                    />
+                    <ClipboardTray
+                        items={trayItems}
+                        onChipDragStart={handleChipDragStart}
+                        onChipDragEnd={handleChipDragEnd}
+                    />
+                </>
+            )}
 
             <CenteredModal open={openEditModal} handleClose={() => setOpenEditModal(false)} title='Edit Item'>
                 <AddEditForm handleClose={() => setOpenEditModal(false)} existingItem={selectedItem}/>
