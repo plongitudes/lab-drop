@@ -36,6 +36,16 @@
     border-radius: 10px;
 }
 
+/* Rubber-band selection rectangle (fixed = viewport coords, matching clientX/Y). */
+.marquee-rect {
+    position: fixed;
+    z-index: 1240;
+    border: 1px solid #7c4dff;
+    background: rgba(124, 77, 255, 0.15);
+    border-radius: 2px;
+    pointer-events: none;
+}
+
 /* Selection check badge — pinned to the tile corner, out of the flex fill flow. */
 .rgl-tile > .tile-select-badge {
     position: absolute;

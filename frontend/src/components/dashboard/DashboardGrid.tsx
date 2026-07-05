@@ -115,6 +115,71 @@ export const DashboardGrid: React.FC = () => {
         preGestureLayout.current = items;
     }, [items]);
 
+    // If the tile that starts dragging is part of a multi-selection, the whole set moves together.
+    const groupDragIds = useRef<Set<string> | null>(null);
+    const handleDragStart = useCallback((_l: Layout[], oldItem: Layout) => {
+        preGestureLayout.current = items;
+        groupDragIds.current =
+            selectedIds.has(oldItem.i) && selectedIds.size > 1 ? new Set(selectedIds) : null;
+    }, [items, selectedIds]);
+
+    // Rubber-band selection: drag on empty grid space to select the tiles the rectangle touches.
+    // Cmd/Ctrl/Shift adds to the current selection instead of replacing it.
+    const [marqueeBox, setMarqueeBox] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+    const marqueePts = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+    const marqueeBase = useRef<Set<string>>(new Set());
+    const onGridMouseDown = useCallback((e: React.MouseEvent) => {
+        if (!editMode || e.button !== 0) return;
+        const target = e.target as HTMLElement;
+        // Only start on empty background — not a tile, the action bar/tray, or a control.
+        if (target.closest('.rgl-tile, .MuiPaper-root, button, a')) return;
+
+        const additive = e.metaKey || e.ctrlKey || e.shiftKey;
+        marqueeBase.current = additive ? new Set(selectedIds) : new Set();
+        marqueePts.current = { x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY };
+        setMarqueeBox({ left: e.clientX, top: e.clientY, width: 0, height: 0 });
+
+        const onMove = (ev: MouseEvent) => {
+            const m = marqueePts.current;
+            if (!m) return;
+            m.x1 = ev.clientX;
+            m.y1 = ev.clientY;
+            setMarqueeBox({
+                left: Math.min(m.x0, m.x1),
+                top: Math.min(m.y0, m.y1),
+                width: Math.abs(m.x1 - m.x0),
+                height: Math.abs(m.y1 - m.y0),
+            });
+        };
+        const onUp = () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+            const m = marqueePts.current;
+            marqueePts.current = null;
+            setMarqueeBox(null);
+            if (!m) return;
+            const r = {
+                left: Math.min(m.x0, m.x1), right: Math.max(m.x0, m.x1),
+                top: Math.min(m.y0, m.y1), bottom: Math.max(m.y0, m.y1),
+            };
+            // A negligible drag is just a background click: clear selection unless additive.
+            if (r.right - r.left < 4 && r.bottom - r.top < 4) {
+                if (!additive) setSelectedIds(new Set());
+                return;
+            }
+            const hit = new Set(marqueeBase.current);
+            document.querySelectorAll('.rgl-tile[data-tile-id]').forEach((el) => {
+                const b = el.getBoundingClientRect();
+                if (!(b.right < r.left || b.left > r.right || b.bottom < r.top || b.top > r.bottom)) {
+                    hit.add((el as HTMLElement).dataset.tileId as string);
+                }
+            });
+            setSelectedIds(hit);
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    }, [editMode, selectedIds]);
+
     // Toggle a tile's selection. Plain = select only this tile; additive (Cmd/Ctrl/Shift) =
     // add/remove from the current selection.
     const toggleSelection = useCallback((id: string, additive: boolean) => {
@@ -142,8 +207,11 @@ export const DashboardGrid: React.FC = () => {
         setTimeout(() => setDashboardLayout(preGesture), 0);
     }, [setDashboardLayout]);
 
-    // Drag drop: try a rigid cluster swap. On success persist it; on rejection snap back.
+    // Drag drop: move a multi-selection as a group, else try a rigid cluster swap. Persist on
+    // success; snap back on rejection.
     const handleDragStop = useCallback((_next: Layout[], _old: Layout, dropped: Layout, _ph: Layout, e: MouseEvent) => {
+        const group = groupDragIds.current;
+        groupDragIds.current = null;
         const tiles = layout.map((l) => ({ id: l.i, x: l.x, y: l.y, w: l.w, h: l.h }));
         const origin = tiles.find((t) => t.id === dropped.i);
 
@@ -154,6 +222,41 @@ export const DashboardGrid: React.FC = () => {
             const target = e?.target as HTMLElement | undefined;
             if (target?.closest('button, a, input, textarea, [role="button"]')) return;
             toggleSelection(dropped.i, !!(e && (e.metaKey || e.ctrlKey || e.shiftKey)));
+            return;
+        }
+
+        // Group move: translate every selected tile by the same delta as a rigid block. Valid only
+        // if all stay in bounds and none overlaps a non-selected tile; otherwise snap the group back.
+        if (group && origin) {
+            const dx = dropped.x - origin.x;
+            const dy = dropped.y - origin.y;
+            const nonGroup = tiles.filter((t) => !group.has(t.id));
+            const moves: Record<string, { x: number; y: number }> = {};
+            let valid = true;
+            for (const t of tiles) {
+                if (!group.has(t.id)) continue;
+                const nx = t.x + dx;
+                const ny = t.y + dy;
+                if (nx < 0 || ny < 0 || nx + t.w > cols) { valid = false; break; }
+                if (nonGroup.some((o) => rectsOverlap(o, { x: nx, y: ny, w: t.w, h: t.h }))) { valid = false; break; }
+                moves[t.id] = { x: nx, y: ny };
+            }
+            if (valid) {
+                const updated = items.map((item) =>
+                    moves[item.id] && item.layout
+                        ? { ...item, layout: { ...item.layout, x: moves[item.id].x, y: moves[item.id].y } }
+                        : item,
+                );
+                setDashboardLayout(updated);
+                saveLayout(updated);
+            } else {
+                const moved = items.map((item) =>
+                    item.id === dropped.i && item.layout
+                        ? { ...item, layout: { ...item.layout, x: dropped.x, y: dropped.y } }
+                        : item,
+                );
+                revertGesture(moved);
+            }
             return;
         }
 
@@ -413,7 +516,10 @@ export const DashboardGrid: React.FC = () => {
 
     return (
         <>
-            <Box sx={{ width: '100%', maxWidth: '100vw', boxSizing: 'border-box', pb: 4 }}>
+            <Box
+                onMouseDown={onGridMouseDown}
+                sx={{ width: '100%', maxWidth: '100vw', boxSizing: 'border-box', pb: 4, minHeight: editMode ? 'calc(100vh - 64px)' : undefined }}
+            >
                 <GridLayout
                     className='dashboard-grid-layout'
                     layout={layout}
@@ -423,7 +529,7 @@ export const DashboardGrid: React.FC = () => {
                     containerPadding={GRID_CONTAINER_PADDING}
                     isDraggable={editMode}
                     isResizable={editMode}
-                    onDragStart={snapshotLayout}
+                    onDragStart={handleDragStart}
                     onResizeStart={snapshotLayout}
                     onDragStop={handleDragStop}
                     onResizeStop={handleResizeStop}
@@ -441,6 +547,7 @@ export const DashboardGrid: React.FC = () => {
                         return (
                         <div
                             key={item.id}
+                            data-tile-id={item.id}
                             className={isSelected ? 'rgl-tile tile-selected' : 'rgl-tile'}
                         >
                             <DashboardTile
@@ -471,6 +578,12 @@ export const DashboardGrid: React.FC = () => {
                         onChipDragStart={handleChipDragStart}
                         onChipDragEnd={handleChipDragEnd}
                     />
+                    {marqueeBox && (
+                        <div
+                            className='marquee-rect'
+                            style={{ left: marqueeBox.left, top: marqueeBox.top, width: marqueeBox.width, height: marqueeBox.height }}
+                        />
+                    )}
                 </>
             )}
 
