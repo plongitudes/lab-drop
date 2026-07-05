@@ -1,5 +1,5 @@
 import { Box, useMediaQuery } from '@mui/material';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import RGL, { WidthProvider, type Layout } from 'react-grid-layout';
 import shortid from 'shortid';
 
@@ -32,6 +32,9 @@ const rectsOverlap = (a: Layout, b: Layout): boolean =>
 export const DashboardGrid: React.FC = () => {
     const [selectedItem, setSelectedItem] = useState<DashboardItem | null>(null);
     const [openEditModal, setOpenEditModal] = useState(false);
+    // Multi-select (edit mode only). Set of selected tile ids; scoped here so toggling it
+    // re-renders this grid but not the memoized tiles (their polling widgets stay put).
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
     const { dashboardLayout, setDashboardLayout, refreshDashboard, editMode, isAdmin, saveLayout } = useAppContext();
 
     // Match the breakpoint AppContextProvider uses to pick the desktop vs mobile array.
@@ -89,6 +92,24 @@ export const DashboardGrid: React.FC = () => {
         preGestureLayout.current = items;
     }, [items]);
 
+    // Toggle a tile's selection. Plain = select only this tile; additive (Cmd/Ctrl/Shift) =
+    // add/remove from the current selection.
+    const toggleSelection = useCallback((id: string, additive: boolean) => {
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (additive) {
+                if (next.has(id)) next.delete(id);
+                else next.add(id);
+            } else if (next.size === 1 && next.has(id)) {
+                next.clear();
+            } else {
+                next.clear();
+                next.add(id);
+            }
+            return next;
+        });
+    }, []);
+
     // Force react-grid-layout to reconcile back to the pre-gesture positions. RGL compares the
     // incoming `layout` prop against the last one it saw; pushing the (moved) layout first makes
     // that stored copy differ from the pre-gesture layout, so the revert actually re-syncs.
@@ -99,8 +120,20 @@ export const DashboardGrid: React.FC = () => {
     }, [setDashboardLayout]);
 
     // Drag drop: try a rigid cluster swap. On success persist it; on rejection snap back.
-    const handleDragStop = useCallback((_next: Layout[], _old: Layout, dropped: Layout) => {
+    const handleDragStop = useCallback((_next: Layout[], _old: Layout, dropped: Layout, _ph: Layout, e: MouseEvent) => {
         const tiles = layout.map((l) => ({ id: l.i, x: l.x, y: l.y, w: l.w, h: l.h }));
+        const origin = tiles.find((t) => t.id === dropped.i);
+
+        // No movement: react-draggable fires start/stop even for a plain click, and it suppresses
+        // the trailing DOM click — so treat a zero-move drop as a selection click here. (Clicks on
+        // the edit menu never reach this: draggableCancel stops react-draggable on those.)
+        if (origin && origin.x === dropped.x && origin.y === dropped.y) {
+            const target = e?.target as HTMLElement | undefined;
+            if (target?.closest('button, a, input, textarea, [role="button"]')) return;
+            toggleSelection(dropped.i, !!(e && (e.metaKey || e.ctrlKey || e.shiftKey)));
+            return;
+        }
+
         const swap = resolveClusterSwap(tiles, dropped.i, dropped.x, dropped.y, cols);
 
         if (swap) {
@@ -119,7 +152,7 @@ export const DashboardGrid: React.FC = () => {
                 : item,
         );
         revertGesture(moved);
-    }, [layout, items, cols, setDashboardLayout, saveLayout, revertGesture]);
+    }, [layout, items, cols, setDashboardLayout, saveLayout, revertGesture, toggleSelection]);
 
     // Resize: reject a resize that would overlap another tile; otherwise persist.
     const handleResizeStop = useCallback((next: Layout[], _old: Layout, resized: Layout) => {
@@ -135,6 +168,11 @@ export const DashboardGrid: React.FC = () => {
         );
         revertGesture(moved);
     }, [items, commitLayout, revertGesture]);
+
+    // Selection is an edit-mode concept only; clear it whenever edit mode turns off.
+    useEffect(() => {
+        if (!editMode) setSelectedIds(new Set());
+    }, [editMode]);
 
     const handleDelete = useCallback((id: string) => {
         const itemToDelete = dashboardLayout.find(item => item.id === id);
@@ -261,8 +299,13 @@ export const DashboardGrid: React.FC = () => {
                     allowOverlap
                     isBounded={false}
                 >
-                    {items.map((item) => (
-                        <div key={item.id} className='rgl-tile'>
+                    {items.map((item) => {
+                        const isSelected = editMode && selectedIds.has(item.id);
+                        return (
+                        <div
+                            key={item.id}
+                            className={isSelected ? 'rgl-tile tile-selected' : 'rgl-tile'}
+                        >
                             <DashboardTile
                                 item={item}
                                 editMode={editMode}
@@ -270,8 +313,10 @@ export const DashboardGrid: React.FC = () => {
                                 onEdit={handleEdit}
                                 onDuplicate={handleDuplicate}
                             />
+                            {isSelected && <span className='tile-select-badge' aria-hidden>✓</span>}
                         </div>
-                    ))}
+                        );
+                    })}
                 </GridLayout>
             </Box>
 

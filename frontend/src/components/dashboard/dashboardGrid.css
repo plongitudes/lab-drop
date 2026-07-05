@@ -28,3 +28,31 @@
     border-radius: 8px;
     opacity: 0.6;
 }
+
+/* Multi-select highlight (edit mode). */
+.rgl-tile.tile-selected {
+    outline: 2px solid #7c4dff;
+    outline-offset: -2px;
+    border-radius: 10px;
+}
+
+/* Selection check badge — pinned to the tile corner, out of the flex fill flow. */
+.rgl-tile > .tile-select-badge {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    z-index: 5;
+    width: 20px;
+    height: 20px;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    line-height: 1;
+    color: #fff;
+    background: #7c4dff;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+}
