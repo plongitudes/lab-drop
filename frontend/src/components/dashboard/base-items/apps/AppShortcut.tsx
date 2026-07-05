@@ -158,7 +158,7 @@ export const AppShortcut = ({ url, name, iconName, showLabel, editMode, config, 
                 </Box>
             ) : isWolShortcut ? (
                 <a href='#' onClick={handleWakeOnLan} style={{ width: '100%', height: '100%' }}>
-                    <Box sx={{ ...styles.center }} className='scale'>
+                    <Box sx={{ ...styles.center, width: '100%', height: '100%' }} className='scale'>
                         {shortcutContent}
                     </Box>
                 </a>
@@ -168,7 +168,7 @@ export const AppShortcut = ({ url, name, iconName, showLabel, editMode, config, 
                 </Box>
             ) : (
                 <a href={url} rel='noopener noreferrer' target='_blank' style={{ width: '100%', height: '100%' }}>
-                    <Box sx={{ ...styles.center }} className='scale'>
+                    <Box sx={{ ...styles.center, width: '100%', height: '100%' }} className='scale'>
                         {shortcutContent}
                     </Box>
                 </a>
