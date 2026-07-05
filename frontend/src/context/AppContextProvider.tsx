@@ -586,73 +586,54 @@ export const AppContextProvider = ({ children }: Props) => {
                 return;
             }
 
+            // The current device's array is taken from the LIVE `dashboardLayout` (updated
+            // synchronously on every drag/move), not from `config` (a mirror that only catches up
+            // after the network save). This keeps the newest coordinates even when a save is slow —
+            // otherwise editing an item after a move can persist stale, pre-move positions and snap
+            // the layout back. The other device's stored array still gets the field change.
+            const currentArray = dashboardLayout.map(item =>
+                item.id === id ? { ...item, ...updatedData } : item
+            );
+
             // If we're on a specific page, update that page
             if (currentPageId) {
                 const updatedPages = config.pages?.map(page => {
                     if (page.id === currentPageId) {
-                        const desktopLayout = page.layout.desktop.map(item =>
+                        const otherArray = (isMobile ? page.layout.desktop : page.layout.mobile).map(item =>
                             item.id === id ? { ...item, ...updatedData } : item
                         );
-                        const mobileLayout = page.layout.mobile.map(item =>
-                            item.id === id ? { ...item, ...updatedData } : item
-                        );
-
-                        // Update local dashboard layout for immediate UI update
-                        setDashboardLayout(isMobile ? mobileLayout : desktopLayout);
-
                         return {
                             ...page,
                             layout: {
-                                desktop: desktopLayout,
-                                mobile: mobileLayout
+                                desktop: isMobile ? otherArray : currentArray,
+                                mobile: isMobile ? currentArray : otherArray,
                             }
                         };
                     }
                     return page;
                 }) || [];
 
+                setDashboardLayout(currentArray);
                 await DashApi.saveConfig({ pages: updatedPages });
-
-                // Update the config state with the new pages data
-                setConfig(prevConfig => ({
-                    ...prevConfig!,
-                    pages: updatedPages
-                }));
-
-                // Update pages state as well
+                setConfig(prevConfig => ({ ...prevConfig!, pages: updatedPages }));
                 setPages(updatedPages);
                 return;
             }
 
-            // Otherwise update main dashboard
-            const desktopLayout = config.layout.desktop.map(item =>
+            // Otherwise update main dashboard.
+            const otherArray = (isMobile ? config.layout.desktop : config.layout.mobile).map(item =>
                 item.id === id ? { ...item, ...updatedData } : item
             );
+            const desktopLayout = isMobile ? otherArray : currentArray;
+            const mobileLayout = isMobile ? currentArray : otherArray;
 
-            const mobileLayout = config.layout.mobile.map(item =>
-                item.id === id ? { ...item, ...updatedData } : item
-            );
+            setDashboardLayout(currentArray);
 
-            // Update local dashboard layout for immediate UI update
-            setDashboardLayout(isMobile ? mobileLayout : desktopLayout);
-
-            // Save both updated layouts to the server
-            const updatedConfigData = {
-                layout: {
-                    desktop: desktopLayout,
-                    mobile: mobileLayout
-                }
-            };
-
+            const updatedConfigData = { layout: { desktop: desktopLayout, mobile: mobileLayout } };
             await DashApi.saveConfig(updatedConfigData);
-
-            // Update the config state with the new layout data
             setConfig(prevConfig => ({
                 ...prevConfig!,
-                layout: {
-                    desktop: desktopLayout,
-                    mobile: mobileLayout
-                }
+                layout: { desktop: desktopLayout, mobile: mobileLayout }
             }));
         } catch (error) {
             console.error('Failed to update item:', error);
