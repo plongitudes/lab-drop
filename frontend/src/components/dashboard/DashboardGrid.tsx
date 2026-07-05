@@ -25,12 +25,27 @@ import {
 } from '../../constants/gridLayout';
 import { migrateFlowLayout } from '../../utils/migrateFlowLayout';
 import { resolveClusterSwap } from '../../utils/resolveClusterSwap';
+import { fitBoxAt } from '../../utils/fitBoxAt';
 
 const GridLayout = WidthProvider(RGL);
 
 type Box = { x: number; y: number; w: number; h: number };
 const rectsOverlap = (a: Box, b: Box): boolean =>
     a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+
+// Convert a drag event's pointer position into a grid cell (top-left anchor), mirroring RGL's
+// own math, so we can compute the fitted drop size during dragover before RGL reports a position.
+const computeDropCell = (e: { clientX: number; clientY: number }, cols: number): { x: number; y: number } | null => {
+    const gridEl = document.querySelector('.dashboard-grid-layout') as HTMLElement | null;
+    if (!gridEl) return null;
+    const rect = gridEl.getBoundingClientRect();
+    const [mx, my] = GRID_MARGIN;
+    const [px, py] = GRID_CONTAINER_PADDING;
+    const colWidth = (rect.width - mx * (cols - 1) - px * 2) / cols;
+    const x = Math.round((e.clientX - rect.left - px) / (colWidth + mx));
+    const y = Math.round((e.clientY - rect.top - py) / (ROW_HEIGHT + my));
+    return { x: Math.max(0, Math.min(cols - 1, x)), y: Math.max(0, y) };
+};
 
 export const DashboardGrid: React.FC = () => {
     const [selectedItem, setSelectedItem] = useState<DashboardItem | null>(null);
@@ -216,21 +231,14 @@ export const DashboardGrid: React.FC = () => {
         });
     }, [selectedIds, dashboardLayout, setDashboardLayout, saveLayout]);
 
-    // Place a tray item at a grid cell if it fits (in bounds, no overlap); returns success.
-    const placeTrayItem = useCallback((id: string, x: number, y: number): boolean => {
-        const item = trayItems.find((t) => t.id === id);
-        const size = item?.layout;
-        if (!item || !size) return false;
-        const box: Box = { x, y, w: size.w, h: size.h };
-        const inBounds = x >= 0 && y >= 0 && x + size.w <= cols;
-        const free = !items.some((i) => i.layout && rectsOverlap(i.layout, box));
-        if (!inBounds || !free) return false;
-        const updated = [...dashboardLayout, { ...item, layout: box }];
-        setDashboardLayout(updated);
-        saveLayout(updated);
-        setTrayItems((prev) => prev.filter((t) => t.id !== id));
-        return true;
-    }, [trayItems, items, cols, dashboardLayout, setDashboardLayout, saveLayout]);
+    // Largest size a tray tile can take when dropped at (x, y): its natural size shrunk to the
+    // free area at the cursor, floored at the type's min size. null => won't fit at all.
+    const fitTrayDrop = useCallback((item: DashboardItem, x: number, y: number): { w: number; h: number } | null => {
+        if (!item.layout) return null;
+        const sizing = getTileSizing(item.type, device);
+        const occupied = items.map((i) => i.layout).filter(Boolean) as Box[];
+        return fitBoxAt(occupied, x, y, item.layout.w, item.layout.h, sizing.minW, sizing.minH, cols);
+    }, [items, cols, device]);
 
     const handleChipDragStart = useCallback((item: DashboardItem, e: React.DragEvent) => {
         draggingTrayId.current = item.id;
@@ -243,15 +251,36 @@ export const DashboardGrid: React.FC = () => {
         draggingTrayId.current = null;
     }, []);
 
-    // RGL fires this when a tray chip is dropped onto the grid.
+    // While a chip is dragged over the grid, resize the drop ghost to the largest area that fits
+    // at the cursor (so a big widget previews shrinking into a small gap). false => can't fit here.
+    const handleDropDragOver = useCallback((e: { clientX: number; clientY: number }) => {
+        const id = draggingTrayId.current;
+        const item = id ? trayItems.find((t) => t.id === id) : undefined;
+        if (!item?.layout) return dropSize;
+        const cell = computeDropCell(e, cols);
+        if (!cell) return { w: item.layout.w, h: item.layout.h };
+        const fit = fitTrayDrop(item, cell.x, cell.y);
+        return fit ?? false;
+    }, [trayItems, cols, dropSize, fitTrayDrop]);
+
+    // RGL fires this when a tray chip is dropped onto the grid. Place at the fitted size.
     const handleGridDrop = useCallback((_layout: Layout[], dropItem: Layout) => {
         const id = draggingTrayId.current;
         draggingTrayId.current = null;
         if (!id) return;
-        if (!placeTrayItem(id, dropItem.x, dropItem.y)) {
+        const item = trayItems.find((t) => t.id === id);
+        if (!item) return;
+        const fit = fitTrayDrop(item, dropItem.x, dropItem.y);
+        if (!fit) {
             ToastManager.error('No room to place that there');
+            return;
         }
-    }, [placeTrayItem]);
+        const placed = { ...item, layout: { x: dropItem.x, y: dropItem.y, w: fit.w, h: fit.h } };
+        const updated = [...dashboardLayout, placed];
+        setDashboardLayout(updated);
+        saveLayout(updated);
+        setTrayItems((prev) => prev.filter((t) => t.id !== id));
+    }, [trayItems, dashboardLayout, fitTrayDrop, setDashboardLayout, saveLayout]);
 
     // Return remaining tray items to the grid (stacked below all content) so nothing is lost.
     const flushTrayToGrid = useCallback(() => {
@@ -404,7 +433,7 @@ export const DashboardGrid: React.FC = () => {
                     isBounded={false}
                     isDroppable={editMode}
                     droppingItem={{ i: '__tray_drop__', w: dropSize.w, h: dropSize.h }}
-                    onDropDragOver={() => dropSize}
+                    onDropDragOver={handleDropDragOver}
                     onDrop={handleGridDrop}
                 >
                     {items.map((item) => {
