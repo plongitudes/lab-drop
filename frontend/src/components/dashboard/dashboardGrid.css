@@ -36,6 +36,25 @@
     border-radius: 10px;
 }
 
+/* Bounding-box ghost for a group drag — green when the drop is valid, red when it'd be rejected. */
+.group-drag-ghost {
+    position: fixed;
+    z-index: 1245;
+    border-radius: 8px;
+    border-width: 2px;
+    border-style: dashed;
+    pointer-events: none;
+    transition: border-color 0.1s ease, background-color 0.1s ease;
+}
+.group-drag-ghost.valid {
+    border-color: #4caf50;
+    background: rgba(76, 175, 80, 0.12);
+}
+.group-drag-ghost.invalid {
+    border-color: #e53935;
+    background: rgba(229, 57, 53, 0.12);
+}
+
 /* Rubber-band selection rectangle (fixed = viewport coords, matching clientX/Y). */
 .marquee-rect {
     position: fixed;
