@@ -1,5 +1,5 @@
 import { Box, useMediaQuery } from '@mui/material';
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import RGL, { WidthProvider, type Layout } from 'react-grid-layout';
 import shortid from 'shortid';
 
@@ -46,7 +46,7 @@ const GridLayout = WidthProvider(RGL);
 export const DashboardGrid: React.FC = () => {
     const [selectedItem, setSelectedItem] = useState<DashboardItem | null>(null);
     const [openEditModal, setOpenEditModal] = useState(false);
-    const { dashboardLayout, setDashboardLayout, refreshDashboard, editMode, isAdmin } = useAppContext();
+    const { dashboardLayout, setDashboardLayout, refreshDashboard, editMode, isAdmin, saveLayout } = useAppContext();
 
     // Match the breakpoint AppContextProvider uses to pick the desktop vs mobile array.
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -83,6 +83,19 @@ export const DashboardGrid: React.FC = () => {
             }),
         [items, device],
     );
+
+    // Persist a drag/resize: merge react-grid-layout's new coordinates back onto the items,
+    // update state (so the rendered layout stays in sync) and save the current device's array.
+    // Fires once per gesture via onDragStop/onResizeStop — no debounce needed.
+    const commitLayout = useCallback((next: Layout[]) => {
+        const byId = new Map(next.map((l) => [l.i, l]));
+        const updated = items.map((item) => {
+            const l = byId.get(item.id);
+            return l ? { ...item, layout: { x: l.x, y: l.y, w: l.w, h: l.h } } : item;
+        });
+        setDashboardLayout(updated);
+        saveLayout(updated);
+    }, [items, setDashboardLayout, saveLayout]);
 
     const handleDelete = (id: string) => {
         const itemToDelete = dashboardLayout.find(item => item.id === id);
@@ -372,8 +385,11 @@ export const DashboardGrid: React.FC = () => {
                     rowHeight={ROW_HEIGHT}
                     margin={GRID_MARGIN}
                     containerPadding={GRID_CONTAINER_PADDING}
-                    isDraggable={false}
-                    isResizable={false}
+                    isDraggable={editMode}
+                    isResizable={editMode}
+                    onDragStop={commitLayout}
+                    onResizeStop={commitLayout}
+                    draggableCancel='.MuiIconButton-root, .no-drag'
                     compactType={null}
                     preventCollision
                     isBounded={false}

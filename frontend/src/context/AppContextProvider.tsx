@@ -484,17 +484,15 @@ export const AppContextProvider = ({ children }: Props) => {
             return;
         }
 
-        // Otherwise save to main dashboard
-        let updatedLayout: DashboardLayout;
-
-        if (config.layout.mobile.length > 3) {
-            // has no prev mobile layout, duplicate desktop
-            updatedLayout = isMobile
-                ? { layout: { ...config.layout, mobile: items } }
-                : { layout: { ...config.layout, desktop: items } };
-        } else {
-            updatedLayout = { layout: { desktop: items, mobile: items } };
-        }
+        // Otherwise save to main dashboard. With explicit per-device coordinates we only
+        // ever write the current device's array (preserving the other device + zones),
+        // so desktop and mobile layouts never clobber each other.
+        const updatedLayout: DashboardLayout = {
+            layout: {
+                ...config.layout,
+                ...(isMobile ? { mobile: items } : { desktop: items }),
+            },
+        };
 
         await DashApi.saveConfig(updatedLayout);
 
