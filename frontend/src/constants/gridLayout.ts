@@ -77,7 +77,7 @@ const APP_SPEC: TileSpec = {
 const TILE_SPECS: Partial<Record<string, TileSpec>> = {
     [ITEM_TYPE.APP_SHORTCUT]: APP_SPEC,
 
-    [ITEM_TYPE.DATE_TIME_WIDGET]: { ...WIDGET_SPEC, h: { desktop: 2, mobile: 2 }, minH: 2, maxH: 4 },
+    [ITEM_TYPE.DATE_TIME_WIDGET]: { ...WIDGET_SPEC, h: { desktop: 3, mobile: 3 }, minH: 2, maxH: 4 },
     [ITEM_TYPE.WEATHER_WIDGET]: { ...WIDGET_SPEC, h: { desktop: 3, mobile: 3 } },
     [ITEM_TYPE.SYSTEM_MONITOR_WIDGET]: { ...WIDGET_SPEC, h: { desktop: 3, mobile: 3 } },
     [ITEM_TYPE.PIHOLE_WIDGET]: { ...WIDGET_SPEC, h: { desktop: 3, mobile: 3 } },

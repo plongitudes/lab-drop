@@ -10,10 +10,15 @@
     box-sizing: border-box;
 }
 
-/* The widget Card inside should stretch to fill the cell in both axes. */
+/* The widget Card inside should stretch to fill the cell in both axes.
+   Neutralize the flow-era CSS min-height so the tile's height is governed solely by
+   RGL's `h` (single source of truth). Minimum usable height is enforced by RGL's
+   per-type `minH` constraint during resize instead, so the resize handle always sits
+   at the true cell corner rather than floating over spilled content. */
 .rgl-tile > * {
     flex: 1 1 auto;
     min-width: 0;
+    min-height: 0 !important;
     height: 100%;
 }
 
