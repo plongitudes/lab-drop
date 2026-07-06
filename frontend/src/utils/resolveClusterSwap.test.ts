@@ -81,4 +81,16 @@ describe('resolveClusterSwap', () => {
         const tiles = [t('a', 0, 0, 4, 2)];
         expect(resolveClusterSwap(tiles, 'a', 0, 0, COLS)).toBeNull();
     });
+
+    it('parks the displaced cluster at a stable spot across a short-drag range (no follow-then-recede)', () => {
+        // Wide W(w12) with two small tiles at its right. Dragging W right across the whole valid
+        // range must park the shortcuts at the same vacated far-left spot at every step — not slide
+        // toward W and then away as the resolution flips from push to rigid.
+        const tiles = [t('W', 0, 0, 12, 3), t('P', 12, 0, 4, 2), t('J', 16, 0, 4, 2)];
+        for (let dx = 8; dx <= 12; dx++) {
+            const r = resolveClusterSwap(tiles, 'W', dx, 0, COLS);
+            expect(r).not.toBeNull();
+            expect({ P: r!.P, J: r!.J }).toEqual({ P: { x: 0, y: 0 }, J: { x: 4, y: 0 } });
+        }
+    });
 });

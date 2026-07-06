@@ -2,20 +2,17 @@
  * Swap-on-drop resolution for the free-2-D dashboard grid.
  *
  * When a tile is dropped onto occupied cell(s), the group of tiles fully enclosed by the dragged
- * tile's drop footprint is displaced so the dragged tile can take that footprint. Two strategies,
- * tried in order:
+ * tile's drop footprint is displaced so the dragged tile can take that footprint. Which way they're
+ * displaced depends on whether the drag was long or short:
  *
- *  1. **Rigid cluster swap** — translate the enclosed cluster as one block into the dragged tile's
- *     vacated cell. Because the source and drop footprints are congruent, a fully-enclosed cluster
- *     is guaranteed to fit *when the two footprints don't overlap* (a clean trade of places).
+ *  - **Clean swap (footprints disjoint)** — the dragged tile's old and new footprints don't overlap,
+ *    so the enclosed cluster rigidly translates into the vacated cell (a straight trade of places).
  *
- *  2. **Short-drag push** — when the drag is small enough that the source and drop footprints
- *     overlap, the rigid translation lands the cluster back under the dragged tile (re-collision).
- *     This happens whenever the dragged tile is taller/wider than the gap it crossed. Instead of
- *     rejecting, push the cluster just clear of the drop footprint on the side the dragged tile
- *     came from, growing the board's lower/other edge if needed. (E.g. an h3 clock dropped onto two
- *     h2 tiles one row above it: the clock takes the footprint and the two tiles are pushed just
- *     below it.)
+ *  - **Short drag (footprints overlap)** — the drag is small enough that a rigid translation would
+ *    land the cluster back under the dragged tile. Instead, pack the cluster against the *far* edge
+ *    of the vacated footprint (the side away from the drop), growing the board if needed. Packing to
+ *    the far edge (rather than just barely clearing the drop) means the cluster stays put as the drag
+ *    continues in the same direction, instead of following-then-receding as the resolution flips.
  *
  * The only hard gate is "no straddlers" (every overlapped tile must be fully enclosed) plus a final
  * whole-board validation. Returns a map of id -> new {x,y} for every moved tile, or null to reject
@@ -45,13 +42,14 @@ export const resolveClusterSwap = (
     const dragged = tiles.find((t) => t.id === draggedId);
     if (!dragged) return null;
 
-    // The dragged tile's footprint at the drop location.
+    // The dragged tile's vacated (old) footprint O and drop footprint F.
+    const O: Rect = { x: dragged.x, y: dragged.y, w: dragged.w, h: dragged.h };
     const F: Rect = { x: dropX, y: dropY, w: dragged.w, h: dragged.h };
 
     // Dragged tile must stay in bounds (y is unbounded below the grid).
     if (F.x < 0 || F.y < 0 || F.x + F.w > cols) return null;
     // No actual movement.
-    if (F.x === dragged.x && F.y === dragged.y) return null;
+    if (F.x === O.x && F.y === O.y) return null;
 
     const others = tiles.filter((t) => t.id !== draggedId);
     const overlapped = others.filter((t) => overlaps(t, F));
@@ -90,40 +88,39 @@ export const resolveClusterSwap = (
         return Object.fromEntries(moved);
     };
 
-    // Vector carrying the drop footprint back onto the dragged tile's vacated cell.
-    const vx = dragged.x - F.x;
-    const vy = dragged.y - F.y;
+    // Clean swap: footprints disjoint -> rigid translation into the vacated cell.
+    if (!overlaps(O, F)) {
+        return build((s) => ({ x: s.x + (O.x - F.x), y: s.y + (O.y - F.y) }));
+    }
 
-    // 1) Rigid cluster swap.
-    const rigid = build((s) => ({ x: s.x + vx, y: s.y + vy }));
-    if (rigid) return rigid;
-
-    // 2) Short-drag push, along the dominant motion axis, toward the side the drag came from.
-    let push: (s: PlacedTile) => { x: number; y: number };
-    if (Math.abs(vy) >= Math.abs(vx)) {
-        if (vy > 0) {
-            // Dragged tile came from below -> push the cluster just below F.
-            const minY = Math.min(...overlapped.map((s) => s.y));
-            const delta = F.y + F.h - minY;
-            push = (s) => ({ x: s.x, y: s.y + delta });
+    // Short drag: pack the cluster against the far edge of O, away from F, along the dominant axis.
+    const dx = F.x - O.x;
+    const dy = F.y - O.y;
+    let place: (s: PlacedTile) => { x: number; y: number };
+    if (Math.abs(dx) >= Math.abs(dy)) {
+        if (dx > 0) {
+            // Dragged rightward -> pack the cluster to O's left edge.
+            const minX = Math.min(...overlapped.map((s) => s.x));
+            const delta = O.x - minX;
+            place = (s) => ({ x: s.x + delta, y: s.y });
         } else {
-            // Dragged tile came from above -> push the cluster just above F.
-            const maxY = Math.max(...overlapped.map((s) => s.y + s.h));
-            const delta = F.y - maxY;
-            push = (s) => ({ x: s.x, y: s.y + delta });
+            // Dragged leftward -> pack the cluster to O's right edge.
+            const maxX = Math.max(...overlapped.map((s) => s.x + s.w));
+            const delta = O.x + O.w - maxX;
+            place = (s) => ({ x: s.x + delta, y: s.y });
         }
     } else {
-        if (vx > 0) {
-            // Dragged tile came from the right -> push the cluster just right of F.
-            const minX = Math.min(...overlapped.map((s) => s.x));
-            const delta = F.x + F.w - minX;
-            push = (s) => ({ x: s.x + delta, y: s.y });
+        if (dy > 0) {
+            // Dragged downward -> pack the cluster to O's top edge.
+            const minY = Math.min(...overlapped.map((s) => s.y));
+            const delta = O.y - minY;
+            place = (s) => ({ x: s.x, y: s.y + delta });
         } else {
-            // Dragged tile came from the left -> push the cluster just left of F.
-            const maxX = Math.max(...overlapped.map((s) => s.x + s.w));
-            const delta = F.x - maxX;
-            push = (s) => ({ x: s.x + delta, y: s.y });
+            // Dragged upward -> pack the cluster to O's bottom edge.
+            const maxY = Math.max(...overlapped.map((s) => s.y + s.h));
+            const delta = O.y + O.h - maxY;
+            place = (s) => ({ x: s.x, y: s.y + delta });
         }
     }
-    return build(push);
+    return build(place);
 };
