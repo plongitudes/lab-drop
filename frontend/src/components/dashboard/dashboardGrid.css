@@ -36,8 +36,10 @@
     border-radius: 10px;
 }
 
-/* Bounding-box ghost for a group drag — green when the drop is valid, red when it'd be rejected. */
-.group-drag-ghost {
+/* Live drag ghost(s). `valid`/`invalid` mark where the dragged item (or group) would land —
+   green when the drop is clean, red when it'd be rejected. `displaced` marks where a tile the
+   swap would push gets pushed to (green, fainter fill so it reads as a destination, not your tile). */
+.drag-ghost {
     position: fixed;
     z-index: 1245;
     border-radius: 8px;
@@ -46,13 +48,17 @@
     pointer-events: none;
     transition: border-color 0.1s ease, background-color 0.1s ease;
 }
-.group-drag-ghost.valid {
+.drag-ghost.valid {
     border-color: #4caf50;
-    background: rgba(76, 175, 80, 0.12);
+    background: rgba(76, 175, 80, 0.14);
 }
-.group-drag-ghost.invalid {
+.drag-ghost.invalid {
     border-color: #e53935;
-    background: rgba(229, 57, 53, 0.12);
+    background: rgba(229, 57, 53, 0.14);
+}
+.drag-ghost.displaced {
+    border-color: #4caf50;
+    background: rgba(76, 175, 80, 0.07);
 }
 
 /* Rubber-band selection rectangle (fixed = viewport coords, matching clientX/Y). */

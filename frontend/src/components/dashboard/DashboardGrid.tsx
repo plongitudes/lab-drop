@@ -117,26 +117,40 @@ export const DashboardGrid: React.FC = () => {
 
     // If the tile that starts dragging is part of a multi-selection, the whole set moves together.
     const groupDragIds = useRef<Set<string> | null>(null);
-    // Live preview context for a group drag: geometry + members captured at drag start so onDrag
-    // can move the other selected tiles imperatively (no React re-render) and draw a ghost.
+    // Grid pixel geometry captured at drag start; lets onDrag convert grid cells → screen rects
+    // for the live ghost(s). Captured for every drag (single or group).
+    type Geom = { colStep: number; rowStep: number; gridLeft: number; gridTop: number; padX: number; padY: number };
+    // Live preview context for a group drag: origin + members captured at drag start so onDrag can
+    // move the other selected tiles imperatively (no React re-render) and draw the bounding box.
     type GroupDragCtx = {
         originX: number; originY: number;
-        colStep: number; rowStep: number; gridLeft: number; gridTop: number; padX: number; padY: number;
         bbox: { minX: number; minY: number; maxX: number; maxY: number };
         members: { id: string; x: number; y: number; w: number; h: number }[];
         baseTransforms: Map<string, string>;
     };
+    // A single live ghost rectangle. `valid`/`invalid` = where the dragged item lands (green/red);
+    // `displaced` = where a tile the swap would push gets its own green-bordered ghost.
+    type Ghost = { key: string; left: number; top: number; width: number; height: number; kind: 'valid' | 'invalid' | 'displaced' };
+    const dragGeom = useRef<Geom | null>(null);
     const groupDragCtx = useRef<GroupDragCtx | null>(null);
-    const [groupGhost, setGroupGhost] = useState<{ left: number; top: number; width: number; height: number; valid: boolean } | null>(null);
+    const [ghosts, setGhosts] = useState<Ghost[]>([]);
 
     const tileEl = (id: string) => document.querySelector(`.rgl-tile[data-tile-id="${id}"]`) as HTMLElement | null;
+
+    // Grid cell (x,y,w,h) → screen rect, matching the group bounding-box math.
+    const gridToPx = (geom: Geom, x: number, y: number, w: number, h: number) => ({
+        left: geom.gridLeft + geom.padX + x * geom.colStep,
+        top: geom.gridTop + geom.padY + y * geom.rowStep,
+        width: w * geom.colStep - GRID_MARGIN[0],
+        height: h * geom.rowStep - GRID_MARGIN[1],
+    });
 
     const handleDragStart = useCallback((_l: Layout[], oldItem: Layout) => {
         preGestureLayout.current = items;
         const isGroup = selectedIds.has(oldItem.i) && selectedIds.size > 1;
         groupDragIds.current = isGroup ? new Set(selectedIds) : null;
         groupDragCtx.current = null;
-        if (!isGroup) return;
+        dragGeom.current = null;
 
         const gridEl = document.querySelector('.dashboard-grid-layout') as HTMLElement | null;
         if (!gridEl) return;
@@ -144,6 +158,12 @@ export const DashboardGrid: React.FC = () => {
         const [mx, my] = GRID_MARGIN;
         const [px, py] = GRID_CONTAINER_PADDING;
         const colWidth = (rect.width - mx * (cols - 1) - px * 2) / cols;
+        dragGeom.current = {
+            colStep: colWidth + mx, rowStep: ROW_HEIGHT + my,
+            gridLeft: rect.left, gridTop: rect.top, padX: px, padY: py,
+        };
+
+        if (!isGroup) return;
         const members = layout
             .filter((l) => selectedIds.has(l.i))
             .map((l) => ({ id: l.i, x: l.x, y: l.y, w: l.w, h: l.h }));
@@ -159,52 +179,81 @@ export const DashboardGrid: React.FC = () => {
             const el = tileEl(m.id);
             if (el) baseTransforms.set(m.id, el.style.transform);
         });
-        groupDragCtx.current = {
-            originX: oldItem.x, originY: oldItem.y,
-            colStep: colWidth + mx, rowStep: ROW_HEIGHT + my,
-            gridLeft: rect.left, gridTop: rect.top, padX: px, padY: py,
-            bbox, members, baseTransforms,
-        };
+        groupDragCtx.current = { originX: oldItem.x, originY: oldItem.y, bbox, members, baseTransforms };
     }, [items, selectedIds, layout, cols]);
 
-    // Live group-drag preview: nudge the other selected tiles by the current delta and draw the
-    // bounding-box ghost (green if the whole group fits at the target, red if it would be rejected).
+    // Live drag preview. Group drag: nudge the selected tiles in unison + one bounding-box ghost.
+    // Single drag: run the same swap resolver the drop uses, then draw a green/red ghost where the
+    // dragged tile lands plus a green ghost at each tile the swap would displace.
     const handleDrag = useCallback((_l: Layout[], _o: Layout, dragged: Layout) => {
+        const geom = dragGeom.current;
+        if (!geom) return;
+
         const ctx = groupDragCtx.current;
-        if (!ctx) return;
-        const dx = dragged.x - ctx.originX;
-        const dy = dragged.y - ctx.originY;
-        const dxpx = dx * ctx.colStep;
-        const dypx = dy * ctx.rowStep;
+        if (ctx) {
+            const dx = dragged.x - ctx.originX;
+            const dy = dragged.y - ctx.originY;
+            const dxpx = dx * geom.colStep;
+            const dypx = dy * geom.rowStep;
 
-        ctx.members.forEach((m) => {
-            if (m.id === dragged.i) return;
-            const el = tileEl(m.id);
-            if (el) {
-                el.style.transform = `${ctx.baseTransforms.get(m.id) ?? ''} translate(${dxpx}px, ${dypx}px)`;
-                el.style.opacity = '0.7';
-            }
-        });
+            ctx.members.forEach((m) => {
+                if (m.id === dragged.i) return;
+                const el = tileEl(m.id);
+                if (el) {
+                    el.style.transform = `${ctx.baseTransforms.get(m.id) ?? ''} translate(${dxpx}px, ${dypx}px)`;
+                    el.style.opacity = '0.7';
+                }
+            });
 
-        const nonGroup = layout.filter((l) => !groupDragIds.current?.has(l.i));
-        const valid = ctx.members.every((m) => {
-            const nx = m.x + dx;
-            const ny = m.y + dy;
-            if (nx < 0 || ny < 0 || nx + m.w > cols) return false;
-            return !nonGroup.some((o) => rectsOverlap(o, { x: nx, y: ny, w: m.w, h: m.h }));
-        });
+            const nonGroup = layout.filter((l) => !groupDragIds.current?.has(l.i));
+            const valid = ctx.members.every((m) => {
+                const nx = m.x + dx;
+                const ny = m.y + dy;
+                if (nx < 0 || ny < 0 || nx + m.w > cols) return false;
+                return !nonGroup.some((o) => rectsOverlap(o, { x: nx, y: ny, w: m.w, h: m.h }));
+            });
 
-        setGroupGhost({
-            left: ctx.gridLeft + ctx.padX + (ctx.bbox.minX + dx) * ctx.colStep,
-            top: ctx.gridTop + ctx.padY + (ctx.bbox.minY + dy) * ctx.rowStep,
-            width: (ctx.bbox.maxX - ctx.bbox.minX) * ctx.colStep - GRID_MARGIN[0],
-            height: (ctx.bbox.maxY - ctx.bbox.minY) * ctx.rowStep - GRID_MARGIN[1],
-            valid,
-        });
+            setGhosts([{
+                key: 'group',
+                ...gridToPx(geom, ctx.bbox.minX + dx, ctx.bbox.minY + dy, ctx.bbox.maxX - ctx.bbox.minX, ctx.bbox.maxY - ctx.bbox.minY),
+                kind: valid ? 'valid' : 'invalid',
+            }]);
+            return;
+        }
+
+        // Single-tile drag.
+        const tiles = layout.map((l) => ({ id: l.i, x: l.x, y: l.y, w: l.w, h: l.h }));
+        const self = tiles.find((t) => t.id === dragged.i);
+        if (!self) return;
+        const tx = dragged.x;
+        const ty = dragged.y;
+
+        // Hovering the origin cell: nothing would move — show a plain valid ghost.
+        if (tx === self.x && ty === self.y) {
+            setGhosts([{ key: self.id, ...gridToPx(geom, tx, ty, self.w, self.h), kind: 'valid' }]);
+            return;
+        }
+
+        const res = resolveClusterSwap(tiles, dragged.i, tx, ty, cols);
+        if (!res) {
+            setGhosts([{ key: dragged.i, ...gridToPx(geom, tx, ty, self.w, self.h), kind: 'invalid' }]);
+            return;
+        }
+        const next: Ghost[] = [{
+            key: dragged.i,
+            ...gridToPx(geom, res[dragged.i].x, res[dragged.i].y, self.w, self.h),
+            kind: 'valid',
+        }];
+        for (const t of tiles) {
+            if (t.id === dragged.i) continue;
+            const m = res[t.id];
+            if (m) next.push({ key: t.id, ...gridToPx(geom, m.x, m.y, t.w, t.h), kind: 'displaced' });
+        }
+        setGhosts(next);
     }, [layout, cols]);
 
-    // Clear the live group-drag preview (restore transforms/opacity and hide the ghost).
-    const clearGroupPreview = useCallback(() => {
+    // Clear the live drag preview (restore group transforms/opacity and hide all ghosts).
+    const clearDragPreview = useCallback(() => {
         const ctx = groupDragCtx.current;
         if (ctx) {
             ctx.members.forEach((m) => {
@@ -216,7 +265,8 @@ export const DashboardGrid: React.FC = () => {
             });
         }
         groupDragCtx.current = null;
-        setGroupGhost(null);
+        dragGeom.current = null;
+        setGhosts([]);
     }, []);
 
     // Rubber-band selection: drag on empty grid space to select the tiles the rectangle touches.
@@ -308,7 +358,7 @@ export const DashboardGrid: React.FC = () => {
     const handleDragStop = useCallback((_next: Layout[], _old: Layout, dropped: Layout, _ph: Layout, e: MouseEvent) => {
         const group = groupDragIds.current;
         groupDragIds.current = null;
-        clearGroupPreview();
+        clearDragPreview();
         const tiles = layout.map((l) => ({ id: l.i, x: l.x, y: l.y, w: l.w, h: l.h }));
         const origin = tiles.find((t) => t.id === dropped.i);
 
@@ -375,7 +425,7 @@ export const DashboardGrid: React.FC = () => {
                 : item,
         );
         revertGesture(moved);
-    }, [layout, items, cols, setDashboardLayout, saveLayout, revertGesture, toggleSelection, clearGroupPreview]);
+    }, [layout, items, cols, setDashboardLayout, saveLayout, revertGesture, toggleSelection, clearDragPreview]);
 
     // Resize: reject a resize that would overlap another tile; otherwise persist.
     const handleResizeStop = useCallback((next: Layout[], _old: Layout, resized: Layout) => {
@@ -682,12 +732,13 @@ export const DashboardGrid: React.FC = () => {
                             style={{ left: marqueeBox.left, top: marqueeBox.top, width: marqueeBox.width, height: marqueeBox.height }}
                         />
                     )}
-                    {groupGhost && (
+                    {ghosts.map((g) => (
                         <div
-                            className={groupGhost.valid ? 'group-drag-ghost valid' : 'group-drag-ghost invalid'}
-                            style={{ left: groupGhost.left, top: groupGhost.top, width: groupGhost.width, height: groupGhost.height }}
+                            key={g.key}
+                            className={`drag-ghost ${g.kind}`}
+                            style={{ left: g.left, top: g.top, width: g.width, height: g.height }}
                         />
-                    )}
+                    ))}
                 </>
             )}
 
