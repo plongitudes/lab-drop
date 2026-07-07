@@ -475,7 +475,7 @@ adguardRoute.post('/encrypt-password', authenticateToken, async (req: Request, r
 });
 
 // Disable AdGuard Home protection (temporarily or indefinitely)
-adguardRoute.post('/disable', async (req: Request, res: Response) => {
+adguardRoute.post('/disable', authenticateToken, async (req: Request, res: Response) => {
     try {
         const baseUrl = getBaseUrl(req);
         const credentials = getCredentials(req);
@@ -569,7 +569,7 @@ adguardRoute.post('/disable', async (req: Request, res: Response) => {
 });
 
 // Enable AdGuard Home protection
-adguardRoute.post('/enable', async (req: Request, res: Response) => {
+adguardRoute.post('/enable', authenticateToken, async (req: Request, res: Response) => {
     try {
         const baseUrl = getBaseUrl(req);
         const credentials = getCredentials(req);

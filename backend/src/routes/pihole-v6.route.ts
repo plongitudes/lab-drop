@@ -2,6 +2,7 @@ import axios from 'axios';
 import { Request, Response, Router } from 'express';
 import https from 'https';
 
+import { authenticateToken } from '../middleware/auth.middleware';
 import { getItemConnectionInfo } from '../utils/config-lookup';
 import { decrypt, encrypt, isEncrypted } from '../utils/crypto';
 
@@ -735,7 +736,7 @@ piholeV6Route.get('/blocking-status', async (req: Request, res: Response) => {
 });
 
 // Encrypt password for storage
-piholeV6Route.post('/encrypt-password', async (req: Request, res: Response) => {
+piholeV6Route.post('/encrypt-password', authenticateToken, async (req: Request, res: Response) => {
     try {
         const { password } = req.body;
 
@@ -759,7 +760,7 @@ piholeV6Route.post('/encrypt-password', async (req: Request, res: Response) => {
 });
 
 // Disable Pi-hole blocking using v6 API
-piholeV6Route.post('/disable', async (req: Request, res: Response) => {
+piholeV6Route.post('/disable', authenticateToken, async (req: Request, res: Response) => {
     try {
         const baseUrl = getBaseUrl(req);
         const password = getPassword(req);
@@ -858,7 +859,7 @@ piholeV6Route.post('/disable', async (req: Request, res: Response) => {
 });
 
 // Enable Pi-hole blocking using v6 API
-piholeV6Route.post('/enable', async (req: Request, res: Response) => {
+piholeV6Route.post('/enable', authenticateToken, async (req: Request, res: Response) => {
     try {
         const baseUrl = getBaseUrl(req);
         const password = getPassword(req);

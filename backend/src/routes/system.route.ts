@@ -3,6 +3,7 @@ import { NextFunction, Request, Response, Router } from 'express';
 import fs from 'fs';
 import StatusCodes from 'http-status-codes';
 import multer, { StorageEngine } from 'multer';
+import path from 'path';
 import { promisify } from 'util';
 import wol from 'wol';
 
@@ -25,7 +26,9 @@ const storage: StorageEngine = multer.diskStorage({
         cb(null, UPLOAD_DIRECTORY);
     },
     filename: (_req, file, cb) => {
-        cb(null, file.originalname.trim().replaceAll(' ', '_'));
+        // path.basename strips any directory components so a crafted originalname
+        // like "../../evil.png" cannot escape the upload directory.
+        cb(null, path.basename(file.originalname).trim().replaceAll(' ', '_'));
     },
 });
 
@@ -60,7 +63,7 @@ systemRoute.get('/', async (req: Request, res: Response) => {
     }
 });
 
-systemRoute.post('/upload', upload.single('file'), (req: Request, res: Response, next: NextFunction) => {
+systemRoute.post('/upload', [authenticateToken, requireAdmin], upload.single('file'), (req: Request, res: Response, next: NextFunction) => {
     if (!req.file) {
         res.status(StatusCodes.BAD_REQUEST).json({ message: 'No file uploaded' });
     }
@@ -88,7 +91,7 @@ systemRoute.post('/upload', upload.single('file'), (req: Request, res: Response,
 });
 
 // Clean up background images (removes all files at root level in uploads directory)
-systemRoute.post('/clean-background', (req: Request, res: Response) => {
+systemRoute.post('/clean-background', [authenticateToken, requireAdmin], (req: Request, res: Response) => {
     try {
         // Remove all files in the root of uploads directory
         removeExistingFiles();
@@ -128,7 +131,7 @@ systemRoute.post('/update-container', [authenticateToken, requireAdmin], async (
 });
 
 // Wake on LAN endpoint
-systemRoute.post('/wol', (req: Request, res: Response) => {
+systemRoute.post('/wol', [authenticateToken, requireAdmin], (req: Request, res: Response) => {
     const handleWol = async () => {
         try {
             const { mac, ip, port } = req.body;

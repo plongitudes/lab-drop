@@ -337,7 +337,7 @@ sabnzbdRoute.get('/downloads', async (req: Request, res: Response) => {
     }
 });
 
-sabnzbdRoute.post('/pause/:nzoId', async (req: Request, res: Response) => {
+sabnzbdRoute.post('/pause/:nzoId', authenticateToken, async (req: Request, res: Response) => {
     try {
         const apiKey = await ensureValidApiKey(req);
         if (!apiKey) {
@@ -367,7 +367,7 @@ sabnzbdRoute.post('/pause/:nzoId', async (req: Request, res: Response) => {
     }
 });
 
-sabnzbdRoute.post('/resume/:nzoId', async (req: Request, res: Response) => {
+sabnzbdRoute.post('/resume/:nzoId', authenticateToken, async (req: Request, res: Response) => {
     try {
         const apiKey = await ensureValidApiKey(req);
         if (!apiKey) {
@@ -397,7 +397,7 @@ sabnzbdRoute.post('/resume/:nzoId', async (req: Request, res: Response) => {
     }
 });
 
-sabnzbdRoute.delete('/delete/:nzoId', async (req: Request, res: Response) => {
+sabnzbdRoute.delete('/delete/:nzoId', authenticateToken, async (req: Request, res: Response) => {
     try {
         const apiKey = await ensureValidApiKey(req);
         if (!apiKey) {

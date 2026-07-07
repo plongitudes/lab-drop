@@ -2,6 +2,7 @@ import axios from 'axios';
 import { Request, Response, Router } from 'express';
 import https from 'https';
 
+import { authenticateToken } from '../middleware/auth.middleware';
 import { getItemConnectionInfo } from '../utils/config-lookup';
 import { decrypt, isEncrypted } from '../utils/crypto';
 
@@ -211,7 +212,7 @@ sonarrRoute.get('/queue', async (req: Request, res: Response) => {
 });
 
 // Remove item from Sonarr queue
-sonarrRoute.delete('/queue/:id', async (req: Request, res: Response) => {
+sonarrRoute.delete('/queue/:id', authenticateToken, async (req: Request, res: Response) => {
     console.log('Sonarr queue delete request');
     try {
         const baseUrl = getBaseUrl(req);
@@ -334,7 +335,7 @@ sonarrRoute.get('/series', async (req: Request, res: Response) => {
 });
 
 // Refresh Monitored Downloads endpoint
-sonarrRoute.post('/refresh-monitored-downloads', async (req: Request, res: Response): Promise<void> => {
+sonarrRoute.post('/refresh-monitored-downloads', authenticateToken, async (req: Request, res: Response): Promise<void> => {
     try {
         const baseUrl = getBaseUrl(req);
         const apiKey = getApiKey(req);

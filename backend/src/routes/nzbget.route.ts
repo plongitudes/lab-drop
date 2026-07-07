@@ -392,7 +392,7 @@ nzbgetRoute.get('/downloads', async (req: Request, res: Response) => {
 });
 
 // Pause downloads
-nzbgetRoute.post('/pause', async (req: Request, res: Response) => {
+nzbgetRoute.post('/pause', authenticateToken, async (req: Request, res: Response) => {
     try {
         const baseUrl = getBaseUrl(req);
         const auth = await ensureValidSession(req);
@@ -430,7 +430,7 @@ nzbgetRoute.post('/pause', async (req: Request, res: Response) => {
 });
 
 // Resume downloads
-nzbgetRoute.post('/resume', async (req: Request, res: Response) => {
+nzbgetRoute.post('/resume', authenticateToken, async (req: Request, res: Response) => {
     try {
         const baseUrl = getBaseUrl(req);
         const auth = await ensureValidSession(req);
@@ -468,7 +468,7 @@ nzbgetRoute.post('/resume', async (req: Request, res: Response) => {
 });
 
 // Delete download
-nzbgetRoute.delete('/delete/:nzbId', async (req: Request, res: Response) => {
+nzbgetRoute.delete('/delete/:nzbId', authenticateToken, async (req: Request, res: Response) => {
     try {
         const baseUrl = getBaseUrl(req);
         const auth = await ensureValidSession(req);

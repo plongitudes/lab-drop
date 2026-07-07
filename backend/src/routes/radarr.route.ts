@@ -2,6 +2,7 @@ import axios from 'axios';
 import { Request, Response, Router } from 'express';
 import https from 'https';
 
+import { authenticateToken } from '../middleware/auth.middleware';
 import { getItemConnectionInfo } from '../utils/config-lookup';
 import { decrypt, isEncrypted } from '../utils/crypto';
 
@@ -268,7 +269,7 @@ radarrRoute.get('/queue', async (req: Request, res: Response) => {
 });
 
 // Remove item from Radarr queue
-radarrRoute.delete('/queue/:id', async (req: Request, res: Response) => {
+radarrRoute.delete('/queue/:id', authenticateToken, async (req: Request, res: Response) => {
     console.log('Radarr queue delete request');
     try {
         const baseUrl = getBaseUrl(req);
@@ -391,7 +392,7 @@ radarrRoute.get('/movies', async (req: Request, res: Response) => {
 });
 
 // Refresh Monitored Downloads endpoint
-radarrRoute.post('/refresh-monitored-downloads', async (req: Request, res: Response): Promise<void> => {
+radarrRoute.post('/refresh-monitored-downloads', authenticateToken, async (req: Request, res: Response): Promise<void> => {
     try {
         const baseUrl = getBaseUrl(req);
         const apiKey = getApiKey(req);

@@ -2277,7 +2277,7 @@ export class DashApi {
                 seasons
             }, {
                 params: { itemId },
-                withCredentials: false
+                withCredentials: true // request creation now requires auth
             });
             return res.data;
         } catch (error) {
@@ -2303,7 +2303,7 @@ export class DashApi {
         try {
             const res = await axios.post(`${BACKEND_URL}/api/jellyseerr/request/${requestId}/approve`, {}, {
                 params: { itemId },
-                withCredentials: false
+                withCredentials: true // approval now requires auth
             });
             return res.data;
         } catch (error) {
@@ -2316,7 +2316,7 @@ export class DashApi {
         try {
             const res = await axios.post(`${BACKEND_URL}/api/jellyseerr/request/${requestId}/decline`, {}, {
                 params: { itemId },
-                withCredentials: false
+                withCredentials: true // decline now requires auth
             });
             return res.data;
         } catch (error) {

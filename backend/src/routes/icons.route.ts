@@ -3,6 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import { promisify } from 'util';
 
+import { authenticateToken, requireAdmin } from '../middleware/auth.middleware';
+
 export const iconsRoute = Router();
 
 const readFile = promisify(fs.readFile);
@@ -240,7 +242,7 @@ iconsRoute.get('/cache/stats', (req: Request, res: Response) => {
     }
 });
 
-iconsRoute.delete('/cache', (req: Request, res: Response) => {
+iconsRoute.delete('/cache', [authenticateToken, requireAdmin], (req: Request, res: Response) => {
     try {
         iconCache.clear();
         res.json({

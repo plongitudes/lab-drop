@@ -39,10 +39,24 @@ const storage = multer.diskStorage({
     }
 });
 
-const upload = multer({ storage });
+// Allow only raster image types. SVG is intentionally excluded: an uploaded
+// SVG/HTML served from the app origin is a stored-XSS vector.
+const ALLOWED_IMAGE_MIMES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+
+const upload = multer({
+    storage,
+    limits: { fileSize: 5 * 1024 * 1024, files: 20 }, // 5MB per file, max 20 files
+    fileFilter: (_req, file, cb) => {
+        if (ALLOWED_IMAGE_MIMES.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.'));
+        }
+    }
+});
 
 // Upload app icon (single file)
-appShortcutRoute.post('/upload', upload.single('file'), (req: Request, res: Response) => {
+appShortcutRoute.post('/upload', authenticateToken, upload.single('file'), (req: Request, res: Response) => {
     if (!req.file) {
         res.status(400).json({ message: 'No file uploaded' });
         return;

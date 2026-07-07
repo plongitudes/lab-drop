@@ -2,6 +2,7 @@ import axios from 'axios';
 import { Request, Response, Router } from 'express';
 import https from 'https';
 
+import { authenticateToken } from '../middleware/auth.middleware';
 import { getItemConnectionInfo } from '../utils/config-lookup';
 import { decrypt, isEncrypted } from '../utils/crypto';
 
@@ -185,7 +186,7 @@ jellyseerRoute.get('/requests', async (req: Request, res: Response) => {
 });
 
 // Request a movie or TV show
-jellyseerRoute.post('/request', async (req: Request, res: Response) => {
+jellyseerRoute.post('/request', authenticateToken, async (req: Request, res: Response) => {
     console.log('Jellyseerr request creation');
     try {
         const baseUrl = getBaseUrl(req);
@@ -251,7 +252,7 @@ jellyseerRoute.post('/request', async (req: Request, res: Response) => {
 });
 
 // Approve a request
-jellyseerRoute.post('/request/:id/approve', async (req: Request, res: Response) => {
+jellyseerRoute.post('/request/:id/approve', authenticateToken, async (req: Request, res: Response) => {
     console.log('Jellyseerr request approval');
     try {
         const baseUrl = getBaseUrl(req);
@@ -290,7 +291,7 @@ jellyseerRoute.post('/request/:id/approve', async (req: Request, res: Response) 
 });
 
 // Decline a request
-jellyseerRoute.post('/request/:id/decline', async (req: Request, res: Response) => {
+jellyseerRoute.post('/request/:id/decline', authenticateToken, async (req: Request, res: Response) => {
     console.log('Jellyseerr request decline');
     try {
         const baseUrl = getBaseUrl(req);

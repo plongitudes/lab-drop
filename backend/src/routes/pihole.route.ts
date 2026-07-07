@@ -174,7 +174,7 @@ piholeRoute.post('/encrypt-password', authenticateToken, async (req: Request, re
 });
 
 // Disable Pi-hole blocking (temporarily or indefinitely)
-piholeRoute.post('/disable', async (req: Request, res: Response) => {
+piholeRoute.post('/disable', authenticateToken, async (req: Request, res: Response) => {
     try {
         const baseUrl = getBaseUrl(req);
         const apiToken = getApiToken(req);
@@ -222,7 +222,7 @@ piholeRoute.post('/disable', async (req: Request, res: Response) => {
 });
 
 // Enable Pi-hole blocking
-piholeRoute.post('/enable', async (req: Request, res: Response) => {
+piholeRoute.post('/enable', authenticateToken, async (req: Request, res: Response) => {
     try {
         const baseUrl = getBaseUrl(req);
         const apiToken = getApiToken(req);
