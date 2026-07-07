@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { UPLOAD_DIRECTORY } from '../constants/constants';
-import { authenticateToken } from '../middleware/auth.middleware';
+import { authenticateToken, requireAdmin } from '../middleware/auth.middleware';
 
 export const uploadsRoute = Router();
 
@@ -90,20 +90,22 @@ uploadsRoute.get('/images', authenticateToken, (req: Request, res: Response) => 
 });
 
 // Delete an uploaded image
-uploadsRoute.delete('/images', authenticateToken, (req: Request, res: Response) => {
+uploadsRoute.delete('/images', [authenticateToken, requireAdmin], (req: Request, res: Response) => {
     try {
         const { imagePath } = req.body;
 
-        if (!imagePath) {
+        if (!imagePath || typeof imagePath !== 'string') {
             res.status(400).json({ message: 'Image path is required' });
             return;
         }
 
-        // Validate that the path is within the uploads directory
-        const fullPath = path.join(process.cwd(), 'public', imagePath);
+        // Validate that the path is within the uploads directory. path.join treats
+        // imagePath as relative (even with a leading slash) and collapses any "..",
+        // and the trailing separator stops a sibling like "uploads-evil" from matching.
         const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+        const fullPath = path.join(process.cwd(), 'public', imagePath);
 
-        if (!fullPath.startsWith(uploadsDir)) {
+        if (fullPath !== uploadsDir && !fullPath.startsWith(uploadsDir + path.sep)) {
             res.status(400).json({ message: 'Invalid image path' });
             return;
         }

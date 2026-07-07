@@ -123,18 +123,31 @@ iconsRoute.post('/bulk', async (req: Request, res: Response) => {
                 // Sanitize the path
                 const sanitizedPath = iconPath.replace('./assets/', '');
 
-                // Determine the full file path
+                // Determine the full file path and the base dir it must stay within
                 let fullPath: string;
+                let baseDir: string;
 
                 if (iconPath.startsWith('/uploads/app-icons/')) {
                     // Custom uploaded icon - remove leading slash and join with public
+                    baseDir = path.resolve('public');
                     fullPath = path.join('public', iconPath.substring(1));
                 } else if (sanitizedPath.includes('app-icons/')) {
                     // Legacy handling for app-icons paths
+                    baseDir = path.resolve('public');
                     fullPath = path.join('public', 'uploads', sanitizedPath);
                 } else {
                     // Standard asset icon from npm package
+                    baseDir = path.resolve('node_modules', '@loganmarchione', 'homelab-svg-assets', 'assets');
                     fullPath = path.join('node_modules', '@loganmarchione', 'homelab-svg-assets', 'assets', sanitizedPath);
+                }
+
+                // Reject path traversal: the resolved path must stay within its base dir,
+                // so a value like "../../../../etc/passwd" cannot escape the icon roots.
+                const resolvedPath = path.resolve(fullPath);
+                if (resolvedPath !== baseDir && !resolvedPath.startsWith(baseDir + path.sep)) {
+                    console.warn(`Rejected icon path outside allowed directory: ${iconPath}`);
+                    errors.push(`Invalid icon path: ${iconPath}`);
+                    return;
                 }
 
                 console.log(`Looking for icon at: ${fullPath}`);
