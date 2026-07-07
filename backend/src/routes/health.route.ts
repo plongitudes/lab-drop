@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { Request, Response, Router } from 'express';
 import https from 'https';
 import os from 'os';
@@ -10,15 +10,21 @@ const httpsAgent = new https.Agent({
     rejectUnauthorized: false,
 });
 
-// Helper function to ping a hostname
+// Accept only RFC-1123 hostnames / IPv4 (all-digit labels) or bare IPv6, so a
+// value like "127.0.0.1;id" can never reach the ping subprocess.
+const HOSTNAME_OR_IPV4 =
+    /^(?=.{1,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+const IPV6 = /^[0-9a-fA-F:]{2,45}$/;
+
+const isValidPingHost = (host: string): boolean =>
+    HOSTNAME_OR_IPV4.test(host) || IPV6.test(host);
+
+// Helper function to ping a hostname. Uses execFile (no shell) so the host is
+// passed as a literal argv entry, not interpolated into a shell command.
 const pingHost = (hostname: string): Promise<boolean> => {
     return new Promise((resolve) => {
-        exec(`ping -c 1 -W 1 ${hostname}`, (error) => {
-            if (error) {
-                resolve(false);
-            } else {
-                resolve(true);
-            }
+        execFile('ping', ['-c', '1', '-W', '1', hostname], (error) => {
+            resolve(!error);
         });
     });
 };
@@ -36,8 +42,12 @@ healthRoute.get('/', async (req: Request, res: Response): Promise<void> => {
     try {
         // For ping type health checks
         if (checkType === 'ping') {
+            // For ping, the URL parameter is just the hostname
+            if (!isValidPingHost(url)) {
+                res.status(400).json({ status: 'error', message: 'Invalid hostname' });
+                return;
+            }
             try {
-                // For ping, the URL parameter is just the hostname
                 const isReachable = await pingHost(url);
                 res.json({ status: isReachable ? 'online' : 'offline' });
                 return;
