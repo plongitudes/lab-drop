@@ -1,10 +1,10 @@
 import bcrypt from 'bcrypt';
-import { Request, Response, Router } from 'express';
+import { NextFunction, Request, Response, Router } from 'express';
 import fs from 'fs';
 import jwt from 'jsonwebtoken';
 import path from 'path';
 
-import { authenticateToken } from '../middleware/auth.middleware';
+import { authenticateToken, requireAdmin } from '../middleware/auth.middleware';
 import { SECRET } from '../utils/secret';
 
 export const authRoute = Router();
@@ -82,8 +82,27 @@ const getTokenExpiration = (token: string): Date | null => {
     }
 };
 
+// Allow unauthenticated signup ONLY for the first-admin bootstrap. Once any
+// user exists, creating accounts requires an authenticated admin — otherwise an
+// attacker who reaches /signup on a fresh/exposed deploy becomes admin.
+const signupGate = (req: Request, res: Response, next: NextFunction): void => {
+    let hasUsers = false;
+    try {
+        hasUsers = readUsers().length > 0;
+    } catch {
+        hasUsers = false;
+    }
+
+    if (!hasUsers) {
+        next();
+        return;
+    }
+
+    authenticateToken(req, res, () => requireAdmin(req, res, next));
+};
+
 // Signup route
-authRoute.post('/signup', async (req: Request, res: Response) => {
+authRoute.post('/signup', signupGate, async (req: Request, res: Response) => {
     try {
         const { username, password } = req.body;
 
