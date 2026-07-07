@@ -1,7 +1,9 @@
 import { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.SECRET || '@jZCgtn^qg8So*^^6A2M'; // Same secret used in auth.route.ts
+import { SECRET } from '../utils/secret';
+
+const JWT_SECRET = SECRET; // Shared app secret (see utils/secret.ts)
 
 // Define custom Request interface with user property
 

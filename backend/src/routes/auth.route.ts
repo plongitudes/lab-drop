@@ -5,11 +5,12 @@ import jwt from 'jsonwebtoken';
 import path from 'path';
 
 import { authenticateToken } from '../middleware/auth.middleware';
+import { SECRET } from '../utils/secret';
 
 export const authRoute = Router();
 const USERS_PATH = path.join(__dirname, '../config/users.json');
-const JWT_SECRET = process.env.SECRET || '@jZCgtn^qg8So*^^6A2M';
-const REFRESH_TOKEN_SECRET = process.env.SECRET || '@jZCgtn^qg8So*^^6A2M';
+const JWT_SECRET = SECRET;
+const REFRESH_TOKEN_SECRET = SECRET;
 const ACCESS_TOKEN_EXPIRY = '3d';
 const REFRESH_TOKEN_EXPIRY = '7d';
 

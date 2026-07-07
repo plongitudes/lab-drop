@@ -8,11 +8,12 @@ import path from 'path';
 import {  authenticateToken, requireAdmin } from '../middleware/auth.middleware';
 import { Config } from '../types';
 import { BackupService } from '../utils/backup.service';
+import { SECRET } from '../utils/secret';
 
 export const configRoute = Router();
 
 const CONFIG_FILE = path.join(__dirname, '../config/config.json');
-const JWT_SECRET = process.env.SECRET || '@jZCgtn^qg8So*^^6A2M';
+const JWT_SECRET = SECRET;
 
 // Helper function to check if user is authenticated and is admin
 const isUserAdmin = (req: Request): boolean => {

@@ -38,8 +38,11 @@ services:
       ports:
         - 2022:2022
       environment:
-        - SECRET=YOUR_SECRET_KEY # any random string for used for encryption.
-        # You can run `openssl rand -base64 32` to generate a key
+        # SECRET is optional. If omitted, a random per-install secret is generated
+        # and persisted to the config volume (/config/.secret) on first run.
+        # Only set it to manage the key yourself (e.g. `openssl rand -base64 32`).
+        # Do NOT reuse a placeholder value — a shared secret defeats the encryption.
+        # - SECRET=CHANGE_ME_TO_A_RANDOM_VALUE
       volumes:
         - /sys:/sys:ro
         - /docker/lab-dash/config:/config
