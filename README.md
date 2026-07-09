@@ -1,4 +1,11 @@
-# Lab Dash
+# Lab Drop
+
+> **A fork of [lab-dash](https://github.com/AnthonyGress/lab-dash) by Anthony Gress**, licensed under GPL-3.0.
+> Lab Drop builds on lab-dash with a free-2D drag-and-drop tile layout and a hardened backend
+> (fail-closed secrets, deny-by-default auth on state-changing endpoints, command-injection and
+> path-traversal fixes). All credit for the original project goes to the upstream author and
+> contributors. See [`LICENSE`](./LICENSE) and the upstream repo for history.
+
 This is an open-source user interface designed to be your internally hosted homepage for your homelab/server. 
 
 <img width="1912" alt="Screenshot 2025-05-08 at 8 58 34 PM" src="https://github.com/user-attachments/assets/55ae6a22-33e3-40ab-b1e2-a8deeaa5239b" />

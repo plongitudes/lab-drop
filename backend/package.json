@@ -1,5 +1,5 @@
 {
-  "name": "lab-dash-backend",
+  "name": "lab-drop-backend",
   "main": "index.js",
   "scripts": {
     "dev": "NODE_ENV=development PORT=5000 nodemon",
@@ -19,7 +19,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "GPL-3.0-only",
   "description": "",
   "dependencies": {
     "@loganmarchione/homelab-svg-assets": "^0.4.14",
