@@ -1,444 +1,563 @@
-import {
-    closestCenter,
-    closestCorners,
-    DndContext,
-    DragOverlay,
-    MeasuringStrategy,
-    PointerSensor,
-    useSensor,
-    useSensors,
-} from '@dnd-kit/core';
-import {
-    arrayMove,
-    rectSortingStrategy,
-    SortableContext,
-} from '@dnd-kit/sortable';
-import { Box, Grid2 as Grid, useMediaQuery } from '@mui/material';
+import { Box, useMediaQuery } from '@mui/material';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import RGL, { WidthProvider, type Layout } from 'react-grid-layout';
 import shortid from 'shortid';
 
-import { SortableNzbget } from './sortable-items/widgets/SortableNzbget';
-import { SortableSabnzbd } from './sortable-items/widgets/SortableSabnzbd';
+import './dashboardGrid.css';
+import { ClipboardTray } from './ClipboardTray';
+import { DashboardTile } from './DashboardTile';
+import { SelectionActionBar } from './SelectionActionBar';
 import { useAppContext } from '../../context/useAppContext';
-import { DashboardItem, DOWNLOAD_CLIENT_TYPE, ITEM_TYPE, TORRENT_CLIENT_TYPE } from '../../types';
+import { DashboardItem, ITEM_TYPE } from '../../types';
 import { AddEditForm } from '../forms/AddEditForm/AddEditForm';
 import { CenteredModal } from '../modals/CenteredModal';
 import { ConfirmationOptions, PopupManager } from '../modals/PopupManager';
 import { ToastManager } from '../toast/ToastManager';
-import { BlankAppShortcut } from './base-items/apps/BlankAppShortcut';
-import { BlankWidget } from './base-items/widgets/BlankWidget';
-import { SortableAppShortcut } from './sortable-items/apps/SortableAppShortcut';
-import { SortableAdGuard } from './sortable-items/widgets/SortableAdGuard';
-import { SortableDateTimeWidget } from './sortable-items/widgets/SortableDateTime';
-import { SortableDeluge } from './sortable-items/widgets/SortableDeluge';
-import { SortableDiskMonitor } from './sortable-items/widgets/SortableDiskMonitor';
-import { SortableDualWidget } from './sortable-items/widgets/SortableDualWidget';
-import { SortableGroupWidget } from './sortable-items/widgets/SortableGroupWidget';
-import { SortableMediaRequestManager } from './sortable-items/widgets/SortableMediaRequestManager';
-import { SortableMediaServer } from './sortable-items/widgets/SortableMediaServer';
-import { SortableNotes } from './sortable-items/widgets/SortableNotes';
-import { SortablePihole } from './sortable-items/widgets/SortablePihole';
-import { SortableQBittorrent } from './sortable-items/widgets/SortableQBittorrent';
-import { SortableRadarr } from './sortable-items/widgets/SortableRadarr';
-import { SortableSonarr } from './sortable-items/widgets/SortableSonarr';
-import { SortableSystemMonitorWidget } from './sortable-items/widgets/SortableSystemMonitor';
-import { SortableTransmission } from './sortable-items/widgets/SortableTransmission';
-import { SortableWeatherWidget } from './sortable-items/widgets/SortableWeather';
 import { theme } from '../../theme/theme';
+import {
+    GRID_COLS,
+    GRID_CONTAINER_PADDING,
+    GRID_MARGIN,
+    ROW_HEIGHT,
+    getTileSizing,
+    isSpacerType,
+    type Device,
+} from '../../constants/gridLayout';
+import { migrateFlowLayout } from '../../utils/migrateFlowLayout';
+import { resolveClusterSwap } from '../../utils/resolveClusterSwap';
+import { fitBoxAt } from '../../utils/fitBoxAt';
 
-// Custom event helper function
-const dispatchDndKitEvent = (name: string, detail: Record<string, any>): void => {
-    document.dispatchEvent(new CustomEvent(`dndkit:${name}`, { detail }));
+const GridLayout = WidthProvider(RGL);
+
+type Box = { x: number; y: number; w: number; h: number };
+const rectsOverlap = (a: Box, b: Box): boolean =>
+    a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+
+// Convert a drag event's pointer position into a grid cell (top-left anchor), mirroring RGL's
+// own math, so we can compute the fitted drop size during dragover before RGL reports a position.
+const computeDropCell = (e: { clientX: number; clientY: number }, cols: number): { x: number; y: number } | null => {
+    const gridEl = document.querySelector('.dashboard-grid-layout') as HTMLElement | null;
+    if (!gridEl) return null;
+    const rect = gridEl.getBoundingClientRect();
+    const [mx, my] = GRID_MARGIN;
+    const [px, py] = GRID_CONTAINER_PADDING;
+    const colWidth = (rect.width - mx * (cols - 1) - px * 2) / cols;
+    const x = Math.round((e.clientX - rect.left - px) / (colWidth + mx));
+    const y = Math.round((e.clientY - rect.top - py) / (ROW_HEIGHT + my));
+    return { x: Math.max(0, Math.min(cols - 1, x)), y: Math.max(0, y) };
 };
-
-// Enhanced collision detection that prioritizes drop zones
-const customCollisionDetection = (args: any) => {
-    const isAppShortcutType =
-        args.active.data.current?.type === ITEM_TYPE.APP_SHORTCUT ||
-        args.active.data.current?.type === ITEM_TYPE.BLANK_APP;
-
-    const isGroupWidgetType = args.active.data.current?.type === 'group-widget';
-
-    // If the active item is an app shortcut, use expanded collision detection for ALL containers
-    if (isAppShortcutType) {
-
-        // Check ALL containers, not just groups, and apply generous detection to group-like containers
-        const allIntersections = args.droppableContainers.map((container: any) => {
-            const activeRect = args.active.rect.current.translated || args.active.rect.current.initial;
-            const containerRect = container.rect.current;
-
-            if (!activeRect || !containerRect) {
-                return { id: container.id, value: 0 };
-            }
-
-
-
-            // Try to get valid coordinates from different possible properties
-            const activeX = activeRect.x ?? activeRect.left ?? 0;
-            const activeY = activeRect.y ?? activeRect.top ?? 0;
-            const activeWidth = activeRect.width ?? 0;
-            const activeHeight = activeRect.height ?? 0;
-
-            const containerX = containerRect.x ?? containerRect.left ?? 0;
-            const containerY = containerRect.y ?? containerRect.top ?? 0;
-            const containerWidth = containerRect.width ?? 0;
-            const containerHeight = containerRect.height ?? 0;
-
-            // Skip if we still don't have valid coordinates
-            if (activeX === 0 && activeY === 0 && activeWidth === 0 && activeHeight === 0) {
-                return { id: container.id, value: 0 };
-            }
-
-            // Check if this is a group-related container
-            const isGroupContainer =
-                container.data.current?.type === 'group-widget' ||
-                container.data.current?.type === 'group-container' ||
-                container.data.current?.type === 'group-widget-container' ||
-                container.id.toString().includes('group-droppable') ||
-                container.data.current?.groupId;
-
-            if (isGroupContainer) {
-                // Calculate the center point of the dragged item using normalized coordinates
-                const activeCenterX = activeX + activeWidth / 2;
-                const activeCenterY = activeY + activeHeight / 2;
-
-                // Expand the container rect by 10px on all sides for precise targeting
-                const expandedRect = {
-                    x: containerX - 10,
-                    y: containerY - 10,
-                    width: containerWidth + 20,
-                    height: containerHeight + 20
-                };
-
-                // Check if the center point is within the expanded bounds
-                const centerInBounds =
-                    activeCenterX >= expandedRect.x &&
-                    activeCenterX <= expandedRect.x + expandedRect.width &&
-                    activeCenterY >= expandedRect.y &&
-                    activeCenterY <= expandedRect.y + expandedRect.height;
-
-                // Create normalized rect objects for intersection calculation
-                const normalizedActiveRect = {
-                    x: activeX,
-                    y: activeY,
-                    width: activeWidth,
-                    height: activeHeight
-                };
-
-                // Also calculate intersection area as a fallback
-                const intersectionArea = getIntersectionArea(normalizedActiveRect, expandedRect);
-                const coverage = intersectionArea / (activeWidth * activeHeight);
-
-                // Use center point detection OR higher threshold overlap
-                const hasValidDrop = centerInBounds || coverage > 0.3;
-
-                return {
-                    id: container.id,
-                    value: hasValidDrop ? (centerInBounds ? 1.0 : coverage) : 0
-                };
-            } else {
-                // For non-group containers, use standard collision detection
-                const normalizedActiveRect = {
-                    x: activeX,
-                    y: activeY,
-                    width: activeWidth,
-                    height: activeHeight
-                };
-                const normalizedContainerRect = {
-                    x: containerX,
-                    y: containerY,
-                    width: containerWidth,
-                    height: containerHeight
-                };
-                const intersectionArea = getIntersectionArea(normalizedActiveRect, normalizedContainerRect);
-                const coverage = intersectionArea / (activeWidth * activeHeight);
-                return {
-                    id: container.id,
-                    value: coverage > 0.5 ? coverage : 0 // Standard threshold for non-groups
-                };
-            }
-        }).filter((intersection: any) => intersection.value > 0);
-
-        if (allIntersections.length > 0) {
-            // Sort by highest intersection value (most precise overlap)
-            allIntersections.sort((a: any, b: any) => b.value - a.value);
-            return [{ id: allIntersections[0].id }];
-        }
-    }
-
-    // For group widgets being dragged, use closestCenter for better reordering
-    // but exclude group-internal droppable containers to prevent interference
-    if (isGroupWidgetType) {
-        // Filter out group-internal containers that shouldn't be targets for group reordering
-        const filteredContainers = args.droppableContainers.filter((container: any) => {
-            const containerId = container.id.toString();
-            // Exclude group-internal droppable containers
-            return !containerId.includes('group-droppable') &&
-                   !containerId.includes('group-widget-droppable') &&
-                   container.data.current?.type !== 'group-container' &&
-                   container.data.current?.type !== 'group-widget-container';
-        });
-
-        // Use closestCenter with filtered containers for group widget reordering
-        return closestCenter({
-            ...args,
-            droppableContainers: filteredContainers
-        });
-    }
-
-    // For all other widget types (non-app-shortcuts, non-group-widgets)
-    // Filter out group-internal containers to ensure proper collision with group widgets
-    const filteredContainers = args.droppableContainers.filter((container: any) => {
-        const containerId = container.id.toString();
-        // Exclude group-internal droppable containers that shouldn't interfere with widget reordering
-        return !containerId.includes('group-droppable') &&
-               !containerId.includes('group-widget-droppable') &&
-               container.data.current?.type !== 'group-container' &&
-               container.data.current?.type !== 'group-widget-container';
-    });
-
-    // Use closestCorners with filtered containers for better collision detection
-    return closestCorners({
-        ...args,
-        droppableContainers: filteredContainers
-    });
-};
-
-// Helper function to calculate intersection area between two rectangles
-function getIntersectionArea(rect1: any, rect2: any) {
-    const xOverlap = Math.max(0, Math.min(rect1.x + rect1.width, rect2.x + rect2.width) - Math.max(rect1.x, rect2.x));
-    const yOverlap = Math.max(0, Math.min(rect1.y + rect1.height, rect2.y + rect2.height) - Math.max(rect1.y, rect2.y));
-    return xOverlap * yOverlap;
-}
 
 export const DashboardGrid: React.FC = () => {
-    const [activeId, setActiveId] = useState<string | null>(null);
-    const [activeData, setActiveData] = useState<any>(null);
     const [selectedItem, setSelectedItem] = useState<DashboardItem | null>(null);
     const [openEditModal, setOpenEditModal] = useState(false);
-    const { dashboardLayout, setDashboardLayout, refreshDashboard, editMode, isAdmin, isLoggedIn, saveLayout } = useAppContext();
-    const isMed = useMediaQuery(theme.breakpoints.down('md'));
-    const containerRef = useRef<HTMLDivElement | null>(null);
-    const [dragPlaceholder, setDragPlaceholder] = useState<{
-        groupId: string,
-        itemId: string,
-        item?: any,
-        visible: boolean,
-        position?: string
-    } | null>(null);
+    // Multi-select (edit mode only). Set of selected tile ids; scoped here so toggling it
+    // re-renders this grid but not the memoized tiles (their polling widgets stay put).
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+    // Clipboard tray: tiles that were cut/copied out of the grid, awaiting placement.
+    const [trayItems, setTrayItems] = useState<DashboardItem[]>([]);
+    // Size of the tray chip currently being dragged onto the grid (drives RGL's drop placeholder).
+    const [dropSize, setDropSize] = useState<{ w: number; h: number }>({ w: 4, h: 2 });
+    const draggingTrayId = useRef<string | null>(null);
+    const { dashboardLayout, setDashboardLayout, refreshDashboard, editMode, isAdmin, saveLayout } = useAppContext();
 
-    // Filter out admin-only items if user is not an admin
+    // Match the breakpoint AppContextProvider uses to pick the desktop vs mobile array.
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const device: Device = isMobile ? 'mobile' : 'desktop';
+    const cols = GRID_COLS[device];
+
+    // Items to render: filter admin-only for non-admins, then migrate the flow layout into
+    // explicit coordinates (idempotent once items already carry `.layout`). Spacers are dropped.
     const items = useMemo(() => {
-        if (isAdmin) {
-            return dashboardLayout; // Show all items for admins
-        } else {
-            const filteredItems = dashboardLayout.filter(item => item.adminOnly !== true);
-            return filteredItems;
-        }
-    }, [dashboardLayout, isAdmin, isLoggedIn]);
+        const visible = isAdmin
+            ? dashboardLayout
+            : dashboardLayout.filter((item) => item.adminOnly !== true);
+        const migrated = migrateFlowLayout(visible, device);
+        return migrated.filter((item) => !isSpacerType(item.type));
+    }, [dashboardLayout, isAdmin, device]);
 
-    const prevAuthStatus = useRef({ isLoggedIn, isAdmin });
+    // Build the react-grid-layout descriptor for every tile.
+    const layout: Layout[] = useMemo(
+        () =>
+            items.map((item) => {
+                const sizing = getTileSizing(item.type, device);
+                const l = item.layout ?? { x: 0, y: 0, w: sizing.w, h: sizing.h };
+                return {
+                    i: item.id,
+                    x: l.x,
+                    y: l.y,
+                    w: l.w,
+                    h: l.h,
+                    minW: sizing.minW,
+                    minH: sizing.minH,
+                    maxW: sizing.maxW,
+                    maxH: sizing.maxH,
+                };
+            }),
+        [items, device],
+    );
 
-    useEffect(() => {
-        // Only refresh if login status or admin status has actually changed
-        if (prevAuthStatus.current.isLoggedIn !== isLoggedIn ||
-            prevAuthStatus.current.isAdmin !== isAdmin) {
+    // Persist a drag/resize: merge react-grid-layout's new coordinates back onto the items,
+    // update state (so the rendered layout stays in sync) and save the current device's array.
+    // Fires once per gesture via onDragStop/onResizeStop — no debounce needed.
+    const commitLayout = useCallback((next: Layout[]) => {
+        const byId = new Map(next.map((l) => [l.i, l]));
+        const updated = items.map((item) => {
+            const l = byId.get(item.id);
+            return l ? { ...item, layout: { x: l.x, y: l.y, w: l.w, h: l.h } } : item;
+        });
+        setDashboardLayout(updated);
+        saveLayout(updated);
+    }, [items, setDashboardLayout, saveLayout]);
 
-            refreshDashboard();
+    // Snapshot of the layout when a gesture begins, so a rejected drag/resize can snap back.
+    const preGestureLayout = useRef<DashboardItem[]>([]);
+    const snapshotLayout = useCallback(() => {
+        preGestureLayout.current = items;
+    }, [items]);
 
-            // Update ref with current values
-            prevAuthStatus.current = { isLoggedIn, isAdmin };
-        }
-    }, [isLoggedIn, isAdmin, refreshDashboard]);
+    // If the tile that starts dragging is part of a multi-selection, the whole set moves together.
+    const groupDragIds = useRef<Set<string> | null>(null);
+    // Grid pixel geometry captured at drag start; lets onDrag convert grid cells → screen rects
+    // for the live ghost(s). Captured for every drag (single or group).
+    type Geom = { colStep: number; rowStep: number; gridLeft: number; gridTop: number; padX: number; padY: number };
+    // Live preview context for a group drag: origin + members captured at drag start so onDrag can
+    // move the other selected tiles imperatively (no React re-render) and draw the bounding box.
+    type GroupDragCtx = {
+        originX: number; originY: number;
+        bbox: { minX: number; minY: number; maxX: number; maxY: number };
+        members: { id: string; x: number; y: number; w: number; h: number }[];
+        baseTransforms: Map<string, string>;
+    };
+    // A single live ghost rectangle. `valid`/`invalid` = where the dragged item lands (green/red);
+    // `displaced` = where a tile the swap would push gets its own green-bordered ghost.
+    type Ghost = { key: string; left: number; top: number; width: number; height: number; kind: 'valid' | 'invalid' | 'displaced' };
+    const dragGeom = useRef<Geom | null>(null);
+    const groupDragCtx = useRef<GroupDragCtx | null>(null);
+    const [ghosts, setGhosts] = useState<Ghost[]>([]);
 
-    const isMobile = useMemo(() => {
-        return (
-            'ontouchstart' in window ||
-            navigator.maxTouchPoints > 0 ||
-            window.matchMedia('(pointer: coarse)').matches
-        );
-    }, []);
+    const tileEl = (id: string) => document.querySelector(`.rgl-tile[data-tile-id="${id}"]`) as HTMLElement | null;
 
-    const sensors = useSensors(useSensor(PointerSensor, {
-        activationConstraint: {
-            delay: isMobile ? 100 : 0, // Prevents accidental drags
-            tolerance: 5, // Ensures drag starts after small movement
-        }
-    }));
+    // Grid cell (x,y,w,h) → screen rect, matching the group bounding-box math.
+    const gridToPx = (geom: Geom, x: number, y: number, w: number, h: number) => ({
+        left: geom.gridLeft + geom.padX + x * geom.colStep,
+        top: geom.gridTop + geom.padY + y * geom.rowStep,
+        width: w * geom.colStep - GRID_MARGIN[0],
+        height: h * geom.rowStep - GRID_MARGIN[1],
+    });
 
-    const [isDragging, setIsDragging] = useState(false);
+    const handleDragStart = useCallback((_l: Layout[], oldItem: Layout) => {
+        preGestureLayout.current = items;
+        const isGroup = selectedIds.has(oldItem.i) && selectedIds.size > 1;
+        groupDragIds.current = isGroup ? new Set(selectedIds) : null;
+        groupDragCtx.current = null;
+        dragGeom.current = null;
 
-    // Listen for group item preview events
-    useEffect(() => {
-        // Handler for group item preview
-        const handleGroupItemPreview = (event: CustomEvent) => {
-            const { dragging, groupId, itemId, position, item } = event.detail || {};
-
-            if (dragging && groupId && itemId) {
-                // Find the group index in the dashboard layout
-                const groupIndex = items.findIndex(i => i.id === groupId);
-
-                if (groupIndex !== -1) {
-                    // Set placeholder data for rendering
-                    setDragPlaceholder({
-                        groupId,
-                        itemId,
-                        item,
-                        visible: true,
-                        position: position || 'next' // Default to next position
-                    });
-                }
-            } else {
-                // Hide the placeholder if needed
-                if (dragPlaceholder?.visible) {
-                    setDragPlaceholder(null);
-                }
-            }
+        const gridEl = document.querySelector('.dashboard-grid-layout') as HTMLElement | null;
+        if (!gridEl) return;
+        const rect = gridEl.getBoundingClientRect();
+        const [mx, my] = GRID_MARGIN;
+        const [px, py] = GRID_CONTAINER_PADDING;
+        const colWidth = (rect.width - mx * (cols - 1) - px * 2) / cols;
+        dragGeom.current = {
+            colStep: colWidth + mx, rowStep: ROW_HEIGHT + my,
+            gridLeft: rect.left, gridTop: rect.top, padX: px, padY: py,
         };
 
-        // Listen for the preview event from group widgets
-        document.addEventListener('dndkit:group-item-preview', handleGroupItemPreview as EventListener);
-
-        // Clean up function
-        return () => {
-            document.removeEventListener('dndkit:group-item-preview', handleGroupItemPreview as EventListener);
+        if (!isGroup) return;
+        const members = layout
+            .filter((l) => selectedIds.has(l.i))
+            .map((l) => ({ id: l.i, x: l.x, y: l.y, w: l.w, h: l.h }));
+        const bbox = {
+            minX: Math.min(...members.map((m) => m.x)),
+            minY: Math.min(...members.map((m) => m.y)),
+            maxX: Math.max(...members.map((m) => m.x + m.w)),
+            maxY: Math.max(...members.map((m) => m.y + m.h)),
         };
-    }, [dragPlaceholder, items]);
+        const baseTransforms = new Map<string, string>();
+        members.forEach((m) => {
+            if (m.id === oldItem.i) return;
+            const el = tileEl(m.id);
+            if (el) baseTransforms.set(m.id, el.style.transform);
+        });
+        groupDragCtx.current = { originX: oldItem.x, originY: oldItem.y, bbox, members, baseTransforms };
+    }, [items, selectedIds, layout, cols]);
 
-    const handleDragStart = (event: any) => {
-        const { active } = event;
-        setActiveId(active.id);
-        setActiveData(active.data.current);
-        setIsDragging(true);
+    // Live drag preview. Group drag: nudge the selected tiles in unison + one bounding-box ghost.
+    // Single drag: run the same swap resolver the drop uses, then draw a green/red ghost where the
+    // dragged tile lands plus a green ghost at each tile the swap would displace.
+    const handleDrag = useCallback((_l: Layout[], _o: Layout, dragged: Layout) => {
+        const geom = dragGeom.current;
+        if (!geom) return;
 
-        // Dispatch event that drag has started
-        dispatchDndKitEvent('active', { active: { id: active.id, data: active.data.current } });
-    };
+        const ctx = groupDragCtx.current;
+        if (ctx) {
+            const dx = dragged.x - ctx.originX;
+            const dy = dragged.y - ctx.originY;
+            const dxpx = dx * geom.colStep;
+            const dypx = dy * geom.rowStep;
 
-    const handleDragOver = (event: any) => {
-        const { over, active } = event;
+            ctx.members.forEach((m) => {
+                if (m.id === dragged.i) return;
+                const el = tileEl(m.id);
+                if (el) {
+                    el.style.transform = `${ctx.baseTransforms.get(m.id) ?? ''} translate(${dxpx}px, ${dypx}px)`;
+                    el.style.opacity = '0.7';
+                }
+            });
 
-        // Dispatch drag over event with both over and active data
-        dispatchDndKitEvent('dragover', { over, active });
-    };
+            const nonGroup = layout.filter((l) => !groupDragIds.current?.has(l.i));
+            const valid = ctx.members.every((m) => {
+                const nx = m.x + dx;
+                const ny = m.y + dy;
+                if (nx < 0 || ny < 0 || nx + m.w > cols) return false;
+                return !nonGroup.some((o) => rectsOverlap(o, { x: nx, y: ny, w: m.w, h: m.h }));
+            });
 
-    const handleDragEnd = (event: any) => {
-        const { active, over } = event;
-
-        setIsDragging(false);
-        setDragPlaceholder(null);
-
-        // Reset all drag states
-        setActiveId(null);
-        setActiveData(null);
-
-        // FAILSAFE: Always restore scrolling on mobile when ANY drag ends
-        if (isMobile) {
-            document.body.style.overflow = '';
-        }
-
-        // Only proceed with events if we have both active and over
-        if (!active || !over) {
-            // Just dispatch the general drag end and inactive events
-            dispatchDndKitEvent('dragend', { active, over });
-            dispatchDndKitEvent('inactive', {});
+            setGhosts([{
+                key: 'group',
+                ...gridToPx(geom, ctx.bbox.minX + dx, ctx.bbox.minY + dy, ctx.bbox.maxX - ctx.bbox.minX, ctx.bbox.maxY - ctx.bbox.minY),
+                kind: valid ? 'valid' : 'invalid',
+            }]);
             return;
         }
 
-        // Now we have both active and over, so we can proceed with specific handling
-        const isAppShortcut = active.data.current?.type === ITEM_TYPE.APP_SHORTCUT;
-        const isGroupItem = active.data.current?.type === 'group-item';
-        const isGroupContainer =
-            over.data.current?.type === 'group-widget' ||
-            over.data.current?.type === 'group-container' ||
-            over.data.current?.type === 'group-widget-container' ||
-            (typeof over.id === 'string' && over.id.includes('group-droppable')) ||
-            (over.data.current?.groupId && typeof over.data.current.groupId === 'string');
+        // Single-tile drag.
+        const tiles = layout.map((l) => ({ id: l.i, x: l.x, y: l.y, w: l.w, h: l.h }));
+        const self = tiles.find((t) => t.id === dragged.i);
+        if (!self) return;
+        const tx = dragged.x;
+        const ty = dragged.y;
 
-        if (active && over) {
-            // Handle group item dragging to dashboard
-            if (isGroupItem &&
-                active.data.current?.parentId &&
-                over.id !== active.data.current.parentId) {
-                // Item was dragged from a group to the dashboard
-
-                // Dispatch the standard drag end event
-                dispatchDndKitEvent('dragend', {
-                    active,
-                    over,
-                    activeId: active?.id,
-                    activeType: active?.data?.current?.type,
-                    overId: over?.id,
-                    overType: over?.data?.current?.type,
-                    action: 'group-item-to-dashboard'
-                });
-            }
-            // Handle app shortcut dragging to group ONLY if directly over the group
-            else if (isAppShortcut && isGroupContainer) {
-                // Item was dragged to a group
-
-                // Dispatch a special event for group widgets
-                dispatchDndKitEvent('app-to-group', {
-                    active,
-                    over,
-                    confirmed: true
-                });
-
-                // Also dispatch the standard drag end event
-                dispatchDndKitEvent('dragend', {
-                    active,
-                    over,
-                    activeId: active?.id,
-                    activeType: active?.data?.current?.type,
-                    overId: over?.id,
-                    overType: over?.data?.current?.type,
-                    action: 'app-to-group'
-                });
-            }
-            // Handle regular reordering
-            else if (active.id !== over.id) {
-                setDashboardLayout((prev) => {
-                    const oldIndex = prev.findIndex((item) => item.id === active.id);
-                    const newIndex = prev.findIndex((item) => item.id === over.id);
-
-                    if (oldIndex !== -1 && newIndex !== -1) {
-                        const newItems = arrayMove(prev, oldIndex, newIndex);
-                        saveLayout(newItems);
-                        return newItems;
-                    }
-                    return prev;
-                });
-
-                // Dispatch the standard drag end event
-                dispatchDndKitEvent('dragend', {
-                    active,
-                    over,
-                    activeId: active?.id,
-                    activeType: active?.data?.current?.type,
-                    overId: over?.id,
-                    overType: over?.data?.current?.type,
-                    action: 'reorder'
-                });
-            }
-            else {
-                // Just a click without any change
-                dispatchDndKitEvent('dragend', {
-                    active,
-                    over,
-                    activeId: active?.id,
-                    activeType: active?.data?.current?.type,
-                    overId: over?.id,
-                    overType: over?.data?.current?.type,
-                    action: 'no-change'
-                });
-            }
+        // Hovering the origin cell: nothing would move — show a plain valid ghost.
+        if (tx === self.x && ty === self.y) {
+            setGhosts([{ key: self.id, ...gridToPx(geom, tx, ty, self.w, self.h), kind: 'valid' }]);
+            return;
         }
 
-        // Dispatch inactive event
-        dispatchDndKitEvent('inactive', {});
-    };
+        const res = resolveClusterSwap(tiles, dragged.i, tx, ty, cols);
+        if (!res) {
+            setGhosts([{ key: dragged.i, ...gridToPx(geom, tx, ty, self.w, self.h), kind: 'invalid' }]);
+            return;
+        }
+        const next: Ghost[] = [{
+            key: dragged.i,
+            ...gridToPx(geom, res[dragged.i].x, res[dragged.i].y, self.w, self.h),
+            kind: 'valid',
+        }];
+        for (const t of tiles) {
+            if (t.id === dragged.i) continue;
+            const m = res[t.id];
+            if (m) next.push({ key: t.id, ...gridToPx(geom, m.x, m.y, t.w, t.h), kind: 'displaced' });
+        }
+        setGhosts(next);
+    }, [layout, cols]);
 
-    const handleDelete = (id: string) => {
+    // Clear the live drag preview (restore group transforms/opacity and hide all ghosts).
+    const clearDragPreview = useCallback(() => {
+        const ctx = groupDragCtx.current;
+        if (ctx) {
+            ctx.members.forEach((m) => {
+                const el = tileEl(m.id);
+                if (el) {
+                    el.style.transform = ctx.baseTransforms.get(m.id) ?? el.style.transform;
+                    el.style.opacity = '';
+                }
+            });
+        }
+        groupDragCtx.current = null;
+        dragGeom.current = null;
+        setGhosts([]);
+    }, []);
+
+    // Rubber-band selection: drag on empty grid space to select the tiles the rectangle touches.
+    // Cmd/Ctrl/Shift adds to the current selection instead of replacing it.
+    const [marqueeBox, setMarqueeBox] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+    const marqueePts = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+    const marqueeBase = useRef<Set<string>>(new Set());
+    const onGridMouseDown = useCallback((e: React.MouseEvent) => {
+        if (!editMode || e.button !== 0) return;
+        const target = e.target as HTMLElement;
+        // Only start on empty background — not a tile, the action bar/tray, or a control.
+        if (target.closest('.rgl-tile, .MuiPaper-root, button, a')) return;
+
+        const additive = e.metaKey || e.ctrlKey || e.shiftKey;
+        marqueeBase.current = additive ? new Set(selectedIds) : new Set();
+        marqueePts.current = { x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY };
+        setMarqueeBox({ left: e.clientX, top: e.clientY, width: 0, height: 0 });
+
+        const onMove = (ev: MouseEvent) => {
+            const m = marqueePts.current;
+            if (!m) return;
+            m.x1 = ev.clientX;
+            m.y1 = ev.clientY;
+            setMarqueeBox({
+                left: Math.min(m.x0, m.x1),
+                top: Math.min(m.y0, m.y1),
+                width: Math.abs(m.x1 - m.x0),
+                height: Math.abs(m.y1 - m.y0),
+            });
+        };
+        const onUp = () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+            const m = marqueePts.current;
+            marqueePts.current = null;
+            setMarqueeBox(null);
+            if (!m) return;
+            const r = {
+                left: Math.min(m.x0, m.x1), right: Math.max(m.x0, m.x1),
+                top: Math.min(m.y0, m.y1), bottom: Math.max(m.y0, m.y1),
+            };
+            // A negligible drag is just a background click: clear selection unless additive.
+            if (r.right - r.left < 4 && r.bottom - r.top < 4) {
+                if (!additive) setSelectedIds(new Set());
+                return;
+            }
+            const hit = new Set(marqueeBase.current);
+            document.querySelectorAll('.rgl-tile[data-tile-id]').forEach((el) => {
+                const b = el.getBoundingClientRect();
+                if (!(b.right < r.left || b.left > r.right || b.bottom < r.top || b.top > r.bottom)) {
+                    hit.add((el as HTMLElement).dataset.tileId as string);
+                }
+            });
+            setSelectedIds(hit);
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    }, [editMode, selectedIds]);
+
+    // Toggle a tile's selection. Plain = select only this tile; additive (Cmd/Ctrl/Shift) =
+    // add/remove from the current selection.
+    const toggleSelection = useCallback((id: string, additive: boolean) => {
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (additive) {
+                if (next.has(id)) next.delete(id);
+                else next.add(id);
+            } else if (next.size === 1 && next.has(id)) {
+                next.clear();
+            } else {
+                next.clear();
+                next.add(id);
+            }
+            return next;
+        });
+    }, []);
+
+    // Force react-grid-layout to reconcile back to the pre-gesture positions. RGL compares the
+    // incoming `layout` prop against the last one it saw; pushing the (moved) layout first makes
+    // that stored copy differ from the pre-gesture layout, so the revert actually re-syncs.
+    const revertGesture = useCallback((moved: DashboardItem[]) => {
+        setDashboardLayout(moved);
+        const preGesture = preGestureLayout.current;
+        setTimeout(() => setDashboardLayout(preGesture), 0);
+    }, [setDashboardLayout]);
+
+    // Drag drop: move a multi-selection as a group, else try a rigid cluster swap. Persist on
+    // success; snap back on rejection.
+    const handleDragStop = useCallback((_next: Layout[], _old: Layout, dropped: Layout, _ph: Layout, e: MouseEvent) => {
+        const group = groupDragIds.current;
+        groupDragIds.current = null;
+        clearDragPreview();
+        const tiles = layout.map((l) => ({ id: l.i, x: l.x, y: l.y, w: l.w, h: l.h }));
+        const origin = tiles.find((t) => t.id === dropped.i);
+
+        // No movement: react-draggable fires start/stop even for a plain click, and it suppresses
+        // the trailing DOM click — so treat a zero-move drop as a selection click here. (Clicks on
+        // the edit menu never reach this: draggableCancel stops react-draggable on those.)
+        if (origin && origin.x === dropped.x && origin.y === dropped.y) {
+            const target = e?.target as HTMLElement | undefined;
+            if (target?.closest('button, a, input, textarea, [role="button"]')) return;
+            toggleSelection(dropped.i, !!(e && (e.metaKey || e.ctrlKey || e.shiftKey)));
+            return;
+        }
+
+        // Group move: translate every selected tile by the same delta as a rigid block. Valid only
+        // if all stay in bounds and none overlaps a non-selected tile; otherwise snap the group back.
+        if (group && origin) {
+            const dx = dropped.x - origin.x;
+            const dy = dropped.y - origin.y;
+            const nonGroup = tiles.filter((t) => !group.has(t.id));
+            const moves: Record<string, { x: number; y: number }> = {};
+            let valid = true;
+            for (const t of tiles) {
+                if (!group.has(t.id)) continue;
+                const nx = t.x + dx;
+                const ny = t.y + dy;
+                if (nx < 0 || ny < 0 || nx + t.w > cols) { valid = false; break; }
+                if (nonGroup.some((o) => rectsOverlap(o, { x: nx, y: ny, w: t.w, h: t.h }))) { valid = false; break; }
+                moves[t.id] = { x: nx, y: ny };
+            }
+            if (valid) {
+                const updated = items.map((item) =>
+                    moves[item.id] && item.layout
+                        ? { ...item, layout: { ...item.layout, x: moves[item.id].x, y: moves[item.id].y } }
+                        : item,
+                );
+                setDashboardLayout(updated);
+                saveLayout(updated);
+            } else {
+                const moved = items.map((item) =>
+                    item.id === dropped.i && item.layout
+                        ? { ...item, layout: { ...item.layout, x: dropped.x, y: dropped.y } }
+                        : item,
+                );
+                revertGesture(moved);
+            }
+            return;
+        }
+
+        const swap = resolveClusterSwap(tiles, dropped.i, dropped.x, dropped.y, cols);
+
+        if (swap) {
+            const updated = items.map((item) => {
+                const p = swap[item.id];
+                return p && item.layout ? { ...item, layout: { ...item.layout, x: p.x, y: p.y } } : item;
+            });
+            setDashboardLayout(updated);
+            saveLayout(updated);
+            return;
+        }
+
+        const moved = items.map((item) =>
+            item.id === dropped.i && item.layout
+                ? { ...item, layout: { ...item.layout, x: dropped.x, y: dropped.y } }
+                : item,
+        );
+        revertGesture(moved);
+    }, [layout, items, cols, setDashboardLayout, saveLayout, revertGesture, toggleSelection, clearDragPreview]);
+
+    // Resize: reject a resize that would overlap another tile; otherwise persist.
+    const handleResizeStop = useCallback((next: Layout[], _old: Layout, resized: Layout) => {
+        const collides = next.some((l) => l.i !== resized.i && rectsOverlap(l, resized));
+        if (!collides) {
+            commitLayout(next);
+            return;
+        }
+        const moved = items.map((item) =>
+            item.id === resized.i && item.layout
+                ? { ...item, layout: { ...item.layout, w: resized.w, h: resized.h } }
+                : item,
+        );
+        revertGesture(moved);
+    }, [items, commitLayout, revertGesture]);
+
+    const handleDeselect = useCallback(() => setSelectedIds(new Set()), []);
+
+    // Cut: lift the selected tiles out of the grid into the tray (freeing their cells).
+    const handleCut = useCallback(() => {
+        const toCut = items.filter((i) => selectedIds.has(i.id));
+        if (!toCut.length) return;
+        setTrayItems((prev) => [...prev, ...toCut]);
+        const cutIds = new Set(toCut.map((i) => i.id));
+        const remaining = dashboardLayout.filter((i) => !cutIds.has(i.id));
+        setDashboardLayout(remaining);
+        saveLayout(remaining);
+        setSelectedIds(new Set());
+    }, [items, selectedIds, dashboardLayout, setDashboardLayout, saveLayout]);
+
+    // Copy: put fresh-id clones of the selected tiles in the tray; originals stay in place.
+    const handleCopy = useCallback(() => {
+        const clones = items
+            .filter((i) => selectedIds.has(i.id))
+            .map((i) => ({ ...(JSON.parse(JSON.stringify(i)) as DashboardItem), id: `item-${shortid.generate()}` }));
+        if (!clones.length) return;
+        setTrayItems((prev) => [...prev, ...clones]);
+        setSelectedIds(new Set());
+    }, [items, selectedIds]);
+
+    const handleDeleteSelected = useCallback(() => {
+        const ids = new Set(selectedIds);
+        if (!ids.size) return;
+        PopupManager.deleteConfirmation({
+            title: `Delete ${ids.size} item${ids.size > 1 ? 's' : ''}?`,
+            confirmAction: async () => {
+                const remaining = dashboardLayout.filter((i) => !ids.has(i.id));
+                setDashboardLayout(remaining);
+                saveLayout(remaining);
+                setSelectedIds(new Set());
+                ToastManager.success(`${ids.size} item${ids.size > 1 ? 's' : ''} deleted`);
+            },
+        });
+    }, [selectedIds, dashboardLayout, setDashboardLayout, saveLayout]);
+
+    // Largest size a tray tile can take when dropped at (x, y): its natural size shrunk to the
+    // free area at the cursor, floored at the type's min size. null => won't fit at all.
+    const fitTrayDrop = useCallback((item: DashboardItem, x: number, y: number): { w: number; h: number } | null => {
+        if (!item.layout) return null;
+        const sizing = getTileSizing(item.type, device);
+        const occupied = items.map((i) => i.layout).filter(Boolean) as Box[];
+        return fitBoxAt(occupied, x, y, item.layout.w, item.layout.h, sizing.minW, sizing.minH, cols);
+    }, [items, cols, device]);
+
+    const handleChipDragStart = useCallback((item: DashboardItem, e: React.DragEvent) => {
+        draggingTrayId.current = item.id;
+        if (item.layout) setDropSize({ w: item.layout.w, h: item.layout.h });
+        e.dataTransfer.setData('text/plain', item.id);
+        e.dataTransfer.effectAllowed = 'move';
+    }, []);
+
+    const handleChipDragEnd = useCallback(() => {
+        draggingTrayId.current = null;
+    }, []);
+
+    // While a chip is dragged over the grid, resize the drop ghost to the largest area that fits
+    // at the cursor (so a big widget previews shrinking into a small gap). false => can't fit here.
+    const handleDropDragOver = useCallback((e: { clientX: number; clientY: number }) => {
+        const id = draggingTrayId.current;
+        const item = id ? trayItems.find((t) => t.id === id) : undefined;
+        if (!item?.layout) return dropSize;
+        const cell = computeDropCell(e, cols);
+        if (!cell) return { w: item.layout.w, h: item.layout.h };
+        const fit = fitTrayDrop(item, cell.x, cell.y);
+        return fit ?? false;
+    }, [trayItems, cols, dropSize, fitTrayDrop]);
+
+    // RGL fires this when a tray chip is dropped onto the grid. Place at the fitted size.
+    const handleGridDrop = useCallback((_layout: Layout[], dropItem: Layout) => {
+        const id = draggingTrayId.current;
+        draggingTrayId.current = null;
+        if (!id) return;
+        const item = trayItems.find((t) => t.id === id);
+        if (!item) return;
+        const fit = fitTrayDrop(item, dropItem.x, dropItem.y);
+        if (!fit) {
+            ToastManager.error('No room to place that there');
+            return;
+        }
+        const placed = { ...item, layout: { x: dropItem.x, y: dropItem.y, w: fit.w, h: fit.h } };
+        const updated = [...dashboardLayout, placed];
+        setDashboardLayout(updated);
+        saveLayout(updated);
+        setTrayItems((prev) => prev.filter((t) => t.id !== id));
+    }, [trayItems, dashboardLayout, fitTrayDrop, setDashboardLayout, saveLayout]);
+
+    // Return remaining tray items to the grid (stacked below all content) so nothing is lost.
+    const flushTrayToGrid = useCallback(() => {
+        if (!trayItems.length) return;
+        const boxes = dashboardLayout.map((i) => i.layout).filter(Boolean) as Box[];
+        let y = boxes.reduce((m, b) => Math.max(m, b.y + b.h), 0);
+        const appended = trayItems.map((item) => {
+            const w = item.layout?.w ?? 12;
+            const h = item.layout?.h ?? 3;
+            const placed = { ...item, layout: { x: 0, y, w, h } };
+            y += h;
+            return placed;
+        });
+        setDashboardLayout([...dashboardLayout, ...appended]);
+        saveLayout([...dashboardLayout, ...appended]);
+        setTrayItems([]);
+    }, [trayItems, dashboardLayout, setDashboardLayout, saveLayout]);
+
+    // Selection + tray are edit-mode concepts; clear selection and return tray items on exit.
+    useEffect(() => {
+        if (!editMode) {
+            setSelectedIds(new Set());
+            flushTrayToGrid();
+        }
+    }, [editMode, flushTrayToGrid]);
+
+    const handleDelete = useCallback((id: string) => {
         const itemToDelete = dashboardLayout.find(item => item.id === id);
         const itemName = itemToDelete?.label || itemToDelete?.config?.displayName || 'Item';
 
@@ -449,20 +568,19 @@ export const DashboardGrid: React.FC = () => {
                 setDashboardLayout(updatedLayout);
                 saveLayout(updatedLayout);
 
-                // Show success toast
                 ToastManager.success(`${itemName} deleted successfully`);
             }
         };
 
         PopupManager.deleteConfirmation(options);
-    };
+    }, [dashboardLayout, setDashboardLayout, saveLayout]);
 
-    const handleEdit = (item: DashboardItem) => {
+    const handleEdit = useCallback((item: DashboardItem) => {
         setSelectedItem(item);
         setOpenEditModal(true);
-    };
+    }, []);
 
-    const handleDuplicate = async (item: DashboardItem) => {
+    const handleDuplicate = useCallback(async (item: DashboardItem) => {
         // Deep clone the item
         const duplicatedItem: DashboardItem = JSON.parse(JSON.stringify(item));
 
@@ -528,481 +646,101 @@ export const DashboardGrid: React.FC = () => {
             }
         }
 
-        // Find the item's position in the layout
-        const index = dashboardLayout.findIndex((i) => i.id === item.id);
-
         // Insert the duplicated item after the original
+        const index = dashboardLayout.findIndex((i) => i.id === item.id);
         const updatedLayout = [...dashboardLayout];
         updatedLayout.splice(index + 1, 0, duplicatedItem);
 
-        // Update the dashboard
         setDashboardLayout(updatedLayout);
-
-        // Save layout and refresh config to ensure backend processing is complete
-        await saveLayout(updatedLayout);
 
         // Refresh the dashboard to get the updated config with processed credentials
         await refreshDashboard();
 
         // Add a longer delay to ensure config propagates to all widgets and backend processing is complete
         await new Promise(resolve => setTimeout(resolve, 500));
-    };
+    }, [dashboardLayout, setDashboardLayout, refreshDashboard]);
 
-    useEffect(() => {
-        const disableScroll = (event: TouchEvent) => {
-            if (event.cancelable) {
-                event.preventDefault();
-            }
-        };
-
-        if (isDragging) {
-            document.addEventListener('touchmove', disableScroll, { passive: false });
-        } else {
-            document.removeEventListener('touchmove', disableScroll);
-        }
-
-        return () => {
-            document.removeEventListener('touchmove', disableScroll);
-        };
-    }, [isDragging]);
-
-    // Find the group widget's index
-    const getGroupPosition = useCallback((groupId: string) => {
-        return items.findIndex(item => item.id === groupId);
-    }, [items]);
-
-    // Render our items with the placeholder inserted at the right position
-    const renderItems = () => {
-        // Clone the items array
-        const itemsToRender = [...items];
-
-        // If we have a visible placeholder and the group exists
-        if (dragPlaceholder?.visible) {
-            const groupIndex = getGroupPosition(dragPlaceholder.groupId);
-
-            if (groupIndex !== -1) {
-                // Determine target index based on position
-                const targetIndex = dragPlaceholder.position === 'next'
-                    ? groupIndex + 1 // Insert after group
-                    : groupIndex;    // Insert before group
-
-                // Insert the placeholder at the target index
-                const result: React.ReactNode[] = [];
-
-                itemsToRender.forEach((item, index) => {
-                    // If this is where we insert the placeholder
-                    if (index === targetIndex) {
-                        result.push(renderPlaceholder(dragPlaceholder));
-                    }
-
-                    // Always add the current item
-                    result.push(renderItem(item));
-                });
-
-                // If the placeholder goes at the end
-                if (targetIndex >= itemsToRender.length) {
-                    result.push(renderPlaceholder(dragPlaceholder));
-                }
-
-                return result;
-            }
-        }
-
-        // If no placeholder or group not found, just render the items normally
-        return itemsToRender.map(item => renderItem(item));
-    };
-
-    // Helper function to create a proper DateTimeConfig
-    const createDateTimeConfig = (config: any) => {
-        return {
-            location: config?.location || null,
-            timezone: config?.timezone || undefined,
-            use24Hour: config?.use24Hour || false
-        };
-    };
-
-    // Helper function to render download client components
-    const renderDownloadClient = (item: any, isOverlay = false) => {
-        const clientType = item.config?.clientType;
-        const key = item.id;
-        const commonProps = {
-            id: item.id,
-            editMode,
-            config: item.config,
-            onDelete: () => handleDelete(item.id),
-            onEdit: () => handleEdit(item),
-            onDuplicate: () => handleDuplicate(item),
-            ...(isOverlay && { isOverlay })
-        };
-
-        // Handle all download client types for DOWNLOAD_CLIENT
-        if (item.type === ITEM_TYPE.DOWNLOAD_CLIENT) {
-            if (clientType === DOWNLOAD_CLIENT_TYPE.DELUGE) {
-                return <SortableDeluge key={key} {...commonProps} />;
-            }
-            if (clientType === DOWNLOAD_CLIENT_TYPE.TRANSMISSION) {
-                return <SortableTransmission key={key} {...commonProps} />;
-            }
-            if (clientType === DOWNLOAD_CLIENT_TYPE.SABNZBD) {
-                return <SortableSabnzbd key={key} {...commonProps} />;
-            }
-            if (clientType === DOWNLOAD_CLIENT_TYPE.NZBGET) {
-                return <SortableNzbget key={key} {...commonProps} />;
-            }
-            // Default to qBittorrent for DOWNLOAD_CLIENT
-            return <SortableQBittorrent key={key} {...commonProps} />;
-        }
-
-        // Handle legacy TORRENT_CLIENT - only torrent clients (no SABnzbd)
-        if (item.type === ITEM_TYPE.TORRENT_CLIENT) {
-            if (clientType === TORRENT_CLIENT_TYPE.DELUGE) {
-                return <SortableDeluge key={key} {...commonProps} />;
-            }
-            if (clientType === TORRENT_CLIENT_TYPE.TRANSMISSION) {
-                return <SortableTransmission key={key} {...commonProps} />;
-            }
-            if (clientType === TORRENT_CLIENT_TYPE.QBITTORRENT) {
-                return <SortableQBittorrent key={key} {...commonProps} />;
-            }
-            // Default to qBittorrent for legacy torrent client
-            return <SortableQBittorrent key={key} {...commonProps} />;
-        }
-
-        // Fallback
-        return <SortableQBittorrent key={key} {...commonProps} />;
-    };
-
-    // Render a single item
-    const renderItem = (item: any) => {
-        switch (item.type) {
-        case ITEM_TYPE.WEATHER_WIDGET:
-            return <SortableWeatherWidget key={item.id} id={item.id} editMode={editMode} config={item.config} onDelete={() => handleDelete(item.id)} onEdit={() => handleEdit(item)} onDuplicate={() => handleDuplicate(item)}/>;
-        case ITEM_TYPE.DATE_TIME_WIDGET:
-            return <SortableDateTimeWidget key={item.id} id={item.id} editMode={editMode} config={createDateTimeConfig(item.config)} onDelete={() => handleDelete(item.id)} onEdit={() => handleEdit(item)} onDuplicate={() => handleDuplicate(item)}/>;
-        case ITEM_TYPE.SYSTEM_MONITOR_WIDGET:
-            return <SortableSystemMonitorWidget key={item.id} id={item.id} editMode={editMode} config={item.config} onDelete={() => handleDelete(item.id)} onEdit={() => handleEdit(item)} onDuplicate={() => handleDuplicate(item)}/>;
-        case ITEM_TYPE.DISK_MONITOR_WIDGET:
-            return <SortableDiskMonitor key={item.id} id={item.id} editMode={editMode} config={item.config} onDelete={() => handleDelete(item.id)} onEdit={() => handleEdit(item)} onDuplicate={() => handleDuplicate(item)} />;
-        case ITEM_TYPE.PIHOLE_WIDGET:
-            return <SortablePihole key={item.id} id={item.id} editMode={editMode} config={item.config} onDelete={() => handleDelete(item.id)} onEdit={() => handleEdit(item)} onDuplicate={() => handleDuplicate(item)}/>;
-        case ITEM_TYPE.ADGUARD_WIDGET:
-            return <SortableAdGuard key={item.id} id={item.id} editMode={editMode} config={item.config} onDelete={() => handleDelete(item.id)} onEdit={() => handleEdit(item)} onDuplicate={() => handleDuplicate(item)}/>;
-        case ITEM_TYPE.DOWNLOAD_CLIENT:
-            return renderDownloadClient(item);
-        case ITEM_TYPE.TORRENT_CLIENT:
-            return renderDownloadClient(item);
-        case ITEM_TYPE.DUAL_WIDGET: {
-            // Transform the existing config to the correct structure
-            const dualWidgetConfig = {
-                topWidget: item.config?.topWidget || undefined,
-                bottomWidget: item.config?.bottomWidget || undefined
-            };
-            return <SortableDualWidget
-                key={item.id}
-                id={item.id}
-                editMode={editMode}
-                config={dualWidgetConfig}
-                onDelete={() => handleDelete(item.id)}
-                onEdit={() => handleEdit(item)}
-                onDuplicate={() => handleDuplicate(item)}
-            />;
-        }
-        case ITEM_TYPE.GROUP_WIDGET:
-            return <SortableGroupWidget
-                key={item.id}
-                id={item.id}
-                editMode={editMode}
-                label={item.label}
-                config={item.config}
-                onDelete={() => handleDelete(item.id)}
-                onEdit={() => handleEdit(item)}
-                onDuplicate={() => handleDuplicate(item)}
-            />;
-        case ITEM_TYPE.MEDIA_SERVER_WIDGET:
-            return <SortableMediaServer
-                key={item.id}
-                id={item.id}
-                editMode={editMode}
-                config={item.config}
-                onDelete={() => handleDelete(item.id)}
-                onEdit={() => handleEdit(item)}
-                onDuplicate={() => handleDuplicate(item)}
-            />;
-        case ITEM_TYPE.MEDIA_REQUEST_MANAGER_WIDGET:
-            return <SortableMediaRequestManager
-                key={item.id}
-                id={item.id}
-                editMode={editMode}
-                config={item.config}
-                onDelete={() => handleDelete(item.id)}
-                onEdit={() => handleEdit(item)}
-                onDuplicate={() => handleDuplicate(item)}
-            />;
-        case ITEM_TYPE.NOTES_WIDGET:
-            return <SortableNotes
-                key={item.id}
-                id={item.id}
-                editMode={editMode}
-                config={item.config}
-                onDelete={() => handleDelete(item.id)}
-                onEdit={() => handleEdit(item)}
-                onDuplicate={() => handleDuplicate(item)}
-            />;
-        case ITEM_TYPE.SONARR_WIDGET:
-            return <SortableSonarr
-                key={item.id}
-                id={item.id}
-                editMode={editMode}
-                config={item.config}
-                onDelete={() => handleDelete(item.id)}
-                onEdit={() => handleEdit(item)}
-                onDuplicate={() => handleDuplicate(item)}
-            />;
-        case ITEM_TYPE.RADARR_WIDGET:
-            return <SortableRadarr
-                key={item.id}
-                id={item.id}
-                editMode={editMode}
-                config={item.config}
-                onDelete={() => handleDelete(item.id)}
-                onEdit={() => handleEdit(item)}
-                onDuplicate={() => handleDuplicate(item)}
-            />;
-        case ITEM_TYPE.APP_SHORTCUT:
-            return (
-                <SortableAppShortcut
-                    key={item.id}
-                    id={item.id}
-                    url={item.url}
-                    name={item.label}
-                    iconName={item.icon?.path || ''}
-                    editMode={editMode}
-                    onDelete={() => handleDelete(item.id)}
-                    onEdit={() => handleEdit(item)}
-                    onDuplicate={() => handleDuplicate(item)}
-                    showLabel={item.showLabel}
-                    config={item.config}
-                />
-            );
-        case ITEM_TYPE.BLANK_APP:
-            return <BlankAppShortcut key={item.id} id={item.id} editMode={editMode} onDelete={() => handleDelete(item.id)} onEdit={() => handleEdit(item)} onDuplicate={() => handleDuplicate(item)} />;
-        case ITEM_TYPE.BLANK_ROW:
-            return <BlankWidget key={item.id} id={item.id} label={item.label} editMode={editMode} onDelete={() => handleDelete(item.id)} onEdit={() => handleEdit(item)} onDuplicate={() => handleDuplicate(item)} row/>;
-        default:
-            return <BlankWidget key={item.id} id={item.id} label={item.label} editMode={editMode} onDelete={() => handleDelete(item.id)} onEdit={() => handleEdit(item)} onDuplicate={() => handleDuplicate(item)} />;
-        }
-    };
-
-    // Render a placeholder app shortcut
-    const renderPlaceholder = (placeholder: any) => {
-        const name = placeholder.item?.name || 'Item';
-        const icon = placeholder.item?.icon || '';
-        const url = placeholder.item?.url;
-        const healthUrl = placeholder.item?.healthUrl;
-        const healthCheckType = placeholder.item?.healthCheckType;
-        const isWol = placeholder.item?.isWol;
-
-        // Create a more complete config object based on available item properties
-        const config: any = {};
-
-        if (healthUrl) {
-            config.healthUrl = healthUrl;
-            config.healthCheckType = healthCheckType;
-        }
-
-        if (isWol) {
-            config.isWol = isWol;
-            config.macAddress = placeholder.item?.macAddress;
-            config.broadcastAddress = placeholder.item?.broadcastAddress;
-            config.port = placeholder.item?.port;
-        }
-
-        return (
-            <SortableAppShortcut
-                key='preview-placeholder'
-                id='preview-placeholder'
-                url={url}
-                name={name}
-                iconName={icon}
-                editMode={false}
-                showLabel={true}
-                config={config}
-                isOverlay={true}
-            />
-        );
-    };
-
-    // Get ids including the placeholder if visible
-    const getSortableIds = () => {
-        if (dragPlaceholder?.visible) {
-            return [...items.map(item => item.id), 'placeholder'];
-        }
-        return items.map(item => item.id);
-    };
 
     return (
         <>
-            <DndContext
-                sensors={sensors}
-                onDragStart={handleDragStart}
-                onDragOver={handleDragOver}
-                onDragEnd={handleDragEnd}
-                collisionDetection={customCollisionDetection}
-                measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+            <Box
+                onMouseDown={onGridMouseDown}
+                sx={{ width: '100%', maxWidth: '100vw', boxSizing: 'border-box', pb: 4, minHeight: editMode ? 'calc(100vh - 64px)' : undefined }}
             >
-                <SortableContext items={getSortableIds()} strategy={rectSortingStrategy} disabled={!editMode}>
-                    <Box
-                        ref={containerRef}
-                        sx={{ width: '100%', maxWidth: '100vw', boxSizing: 'border-box' }}
-                    >
-                        <Grid container sx={{
-                            width: '100%',
-                            maxWidth: '100%',
-                            boxSizing: 'border-box',
-                            px: 2,
-                            paddingBottom: 4
-                        }} spacing={2}>
-                            {renderItems()}
-                        </Grid>
-                    </Box>
-                </SortableContext>
-
-                <DragOverlay
-                    modifiers={[]}
-                    zIndex={10000}
+                <GridLayout
+                    className='dashboard-grid-layout'
+                    layout={layout}
+                    cols={cols}
+                    rowHeight={ROW_HEIGHT}
+                    margin={GRID_MARGIN}
+                    containerPadding={GRID_CONTAINER_PADDING}
+                    isDraggable={editMode}
+                    isResizable={editMode}
+                    onDragStart={handleDragStart}
+                    onDrag={handleDrag}
+                    onResizeStart={snapshotLayout}
+                    onDragStop={handleDragStop}
+                    onResizeStop={handleResizeStop}
+                    draggableCancel='.MuiIconButton-root, .no-drag'
+                    compactType={null}
+                    allowOverlap
+                    isBounded={false}
+                    isDroppable={editMode}
+                    droppingItem={{ i: '__tray_drop__', w: dropSize.w, h: dropSize.h }}
+                    onDropDragOver={handleDropDragOver}
+                    onDrop={handleGridDrop}
                 >
-                    {activeId ? (
-                        // For group items being dragged out, always render as app shortcut
-                        activeData?.type === 'group-item' ? (
-                            // Render a app shortcut overlay for dragged group items
-                            <SortableAppShortcut
-                                key={activeId}
-                                id={activeId}
-                                url={activeData.originalItem?.url}
-                                name={activeData.originalItem?.name || 'App'}
-                                iconName={activeData.originalItem?.icon || ''}
+                    {items.map((item) => {
+                        const isSelected = editMode && selectedIds.has(item.id);
+                        return (
+                        <div
+                            key={item.id}
+                            data-tile-id={item.id}
+                            className={isSelected ? 'rgl-tile tile-selected' : 'rgl-tile'}
+                        >
+                            <DashboardTile
+                                item={item}
                                 editMode={editMode}
-                                isOverlay
-                                showLabel={true}
-                                config={{}}
+                                onDelete={handleDelete}
+                                onEdit={handleEdit}
+                                onDuplicate={handleDuplicate}
                             />
-                        ) : (
-                            // For normal dashboard items, render appropriate overlay
-                            items.map((item) => {
-                                if (item.id === activeId) {
-                                    switch (item.type) {
-                                    case ITEM_TYPE.WEATHER_WIDGET:
-                                        return <SortableWeatherWidget key={item.id} id={item.id} editMode={editMode} config={item.config} isOverlay/>;
-                                    case ITEM_TYPE.DATE_TIME_WIDGET: {
-                                        // Create a properly typed config for DateTimeWidget
-                                        const dateTimeConfig = {
-                                            location: item.config?.location || null,
-                                            timezone: item.config?.timezone || undefined
-                                        };
-                                        return <SortableDateTimeWidget key={item.id} id={item.id} editMode={editMode} config={dateTimeConfig} isOverlay/>;
-                                    }
-                                    case ITEM_TYPE.SYSTEM_MONITOR_WIDGET:
-                                        return <SortableSystemMonitorWidget key={item.id} id={item.id} editMode={editMode} config={item.config} isOverlay/>;
-                                    case ITEM_TYPE.DISK_MONITOR_WIDGET:
-                                        return <SortableDiskMonitor key={item.id} id={item.id} editMode={editMode} config={item.config} isOverlay />;
-                                    case ITEM_TYPE.PIHOLE_WIDGET:
-                                        return <SortablePihole key={item.id} id={item.id} editMode={editMode} config={item.config} isOverlay/>;
-                                    case ITEM_TYPE.ADGUARD_WIDGET:
-                                        return <SortableAdGuard key={item.id} id={item.id} editMode={editMode} config={item.config} isOverlay/>;
-                                    case ITEM_TYPE.DOWNLOAD_CLIENT:
-                                    case ITEM_TYPE.TORRENT_CLIENT:
-                                        return renderDownloadClient(item, true);
-                                    case ITEM_TYPE.DUAL_WIDGET: {
-                                        // Transform the existing config to the correct structure
-                                        const dualWidgetConfig = {
-                                            topWidget: item.config?.topWidget || undefined,
-                                            bottomWidget: item.config?.bottomWidget || undefined
-                                        };
-                                        return <SortableDualWidget
-                                            key={item.id}
-                                            id={item.id}
-                                            editMode={editMode}
-                                            config={dualWidgetConfig}
-                                            isOverlay
-                                        />;
-                                    }
-                                    case ITEM_TYPE.GROUP_WIDGET:
-                                        return <SortableGroupWidget
-                                            key={item.id}
-                                            id={item.id}
-                                            label={item.label}
-                                            editMode={editMode}
-                                            config={item.config}
-                                            isOverlay
-                                        />;
-                                    case ITEM_TYPE.MEDIA_SERVER_WIDGET:
-                                        return <SortableMediaServer
-                                            key={item.id}
-                                            id={item.id}
-                                            editMode={editMode}
-                                            config={item.config}
-                                            isOverlay
-                                        />;
-                                    case ITEM_TYPE.SONARR_WIDGET:
-                                        return <SortableSonarr
-                                            key={item.id}
-                                            id={item.id}
-                                            editMode={editMode}
-                                            config={item.config}
-                                            isOverlay
-                                        />;
-                                    case ITEM_TYPE.RADARR_WIDGET:
-                                        return <SortableRadarr
-                                            key={item.id}
-                                            id={item.id}
-                                            editMode={editMode}
-                                            config={item.config}
-                                            isOverlay
-                                        />;
-                                    case ITEM_TYPE.MEDIA_REQUEST_MANAGER_WIDGET:
-                                        return <SortableMediaRequestManager
-                                            key={item.id}
-                                            id={item.id}
-                                            editMode={editMode}
-                                            config={item.config}
-                                            isOverlay
-                                        />;
-                                    case ITEM_TYPE.NOTES_WIDGET:
-                                        return <SortableNotes
-                                            key={item.id}
-                                            id={item.id}
-                                            editMode={editMode}
-                                            config={item.config}
-                                            isOverlay
-                                        />;
-                                    case ITEM_TYPE.APP_SHORTCUT:
-                                        return (
-                                            <SortableAppShortcut
-                                                key={item.id}
-                                                id={item.id}
-                                                url={item.url}
-                                                name={item.label}
-                                                iconName={item.icon?.path || ''}
-                                                editMode={editMode}
-                                                isOverlay
-                                                showLabel={item.showLabel}
-                                                config={item.config}
-                                            />
-                                        );
-                                    case ITEM_TYPE.BLANK_APP:
-                                        return <BlankAppShortcut key={item.id} id={item.id} editMode={editMode} isOverlay/>;
-                                    case ITEM_TYPE.BLANK_ROW:
-                                        return <BlankWidget key={item.id} id={item.id} label={item.label} editMode={editMode} isOverlay row/>;
-                                    default:
-                                        return <BlankWidget key={item.id} id={item.id} label={item.label} editMode={editMode} isOverlay/>;
-                                    }
-                                }
-                                return null;
-                            })
-                        )
-                    ) : null}
-                </DragOverlay>
-            </DndContext>
+                            {isSelected && <span className='tile-select-badge' aria-hidden>✓</span>}
+                        </div>
+                        );
+                    })}
+                </GridLayout>
+            </Box>
+
+            {editMode && (
+                <>
+                    <SelectionActionBar
+                        count={selectedIds.size}
+                        onCut={handleCut}
+                        onCopy={handleCopy}
+                        onDelete={handleDeleteSelected}
+                        onDeselect={handleDeselect}
+                    />
+                    <ClipboardTray
+                        items={trayItems}
+                        onChipDragStart={handleChipDragStart}
+                        onChipDragEnd={handleChipDragEnd}
+                    />
+                    {marqueeBox && (
+                        <div
+                            className='marquee-rect'
+                            style={{ left: marqueeBox.left, top: marqueeBox.top, width: marqueeBox.width, height: marqueeBox.height }}
+                        />
+                    )}
+                    {ghosts.map((g) => (
+                        <div
+                            key={g.key}
+                            className={`drag-ghost ${g.kind}`}
+                            style={{ left: g.left, top: g.top, width: g.width, height: g.height }}
+                        />
+                    ))}
+                </>
+            )}
 
             <CenteredModal open={openEditModal} handleClose={() => setOpenEditModal(false)} title='Edit Item'>
                 <AddEditForm handleClose={() => setOpenEditModal(false)} existingItem={selectedItem}/>

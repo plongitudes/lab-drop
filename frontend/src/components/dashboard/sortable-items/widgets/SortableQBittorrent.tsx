@@ -1,6 +1,3 @@
-import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { Grid2 } from '@mui/material';
 import React from 'react';
 
 import { QBittorrentWidget } from '../../base-items/widgets/QBittorrentWidget';
@@ -25,24 +22,10 @@ export const SortableQBittorrent: React.FC<Props> = ({
     onDuplicate,
     config
 }) => {
-    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
 
     return (
-        <Grid2
-            size={{ xs: 12, sm: 6, md: 6, lg: 4, xl: 4 }}
-            ref={!isOverlay ? setNodeRef : undefined}
-            {...(!isOverlay ? attributes : {})}
-            {...(!isOverlay ? listeners : {})}
-            sx={{
-                transition,
-                transform: transform ? CSS.Translate.toString(transform) : undefined,
-                opacity: isOverlay ? .6 : 1,
-                visibility: isDragging ? 'hidden' : 'visible',
-            }}
-        >
             <WidgetContainer editMode={editMode} id={id} onDelete={onDelete} onEdit={onEdit} onDuplicate={onDuplicate}>
                 <QBittorrentWidget config={config} id={id} />
             </WidgetContainer>
-        </Grid2>
     );
 };

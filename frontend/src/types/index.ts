@@ -69,6 +69,25 @@ export type SearchProvider = {
     url: string;
 }
 
+// Free 2-D placement: a tile's position/size on the grid (per device).
+export type TileLayout = {
+    x: number;   // grid column (0-based)
+    y: number;   // grid row (0-based)
+    w: number;   // width in grid columns
+    h: number;   // height in rowHeight units
+};
+
+// A spatial-grouping zone: a labeled/colored background rectangle that tiles sit within.
+export type Zone = {
+    id: string;
+    name: string;
+    color?: string;   // theme-relative accent; optional
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+};
+
 export type Page = {
     id: string;
     name: string;
@@ -76,6 +95,8 @@ export type Page = {
     layout: {
         desktop: DashboardItem[];
         mobile: DashboardItem[];
+        zonesDesktop?: Zone[];
+        zonesMobile?: Zone[];
     };
 }
 
@@ -83,6 +104,8 @@ export type Config = {
     layout: {
         desktop: DashboardItem[];
         mobile: DashboardItem[];
+        zonesDesktop?: Zone[];
+        zonesMobile?: Zone[];
     },
     pages?: Page[];
     title?: string;
@@ -107,6 +130,8 @@ export type DashboardLayout = {
     layout: {
         desktop: DashboardItem[];
         mobile: DashboardItem[];
+        zonesDesktop?: Zone[];
+        zonesMobile?: Zone[];
     }
 }
 
@@ -118,6 +143,9 @@ export type DashboardItem = {
     icon?: { path: string; name: string; source?: string; };
     showLabel?: boolean;
     adminOnly?: boolean;
+    // Free 2-D placement (per device: lives on the item within layout.desktop / layout.mobile).
+    // Optional for backward-compat; absent => needs migration (see migrateFlowLayout).
+    layout?: TileLayout;
     config?: {
         temperatureUnit?: string;
         healthUrl?: string;

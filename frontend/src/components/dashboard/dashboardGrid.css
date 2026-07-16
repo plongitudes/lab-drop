@@ -1,0 +1,93 @@
+/* react-grid-layout base styles (positioning, transitions, resize handle) */
+@import 'react-grid-layout/css/styles.css';
+@import 'react-resizable/css/styles.css';
+
+/* Each RGL cell is a fixed-height, absolutely-positioned box; make its content fill it. */
+.rgl-tile {
+    display: flex;
+    height: 100%;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* The widget Card inside should stretch to fill the cell in both axes.
+   Neutralize the flow-era CSS min-height so the tile's height is governed solely by
+   RGL's `h` (single source of truth). Minimum usable height is enforced by RGL's
+   per-type `minH` constraint during resize instead, so the resize handle always sits
+   at the true cell corner rather than floating over spilled content. */
+.rgl-tile > * {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0 !important;
+    height: 100%;
+}
+
+/* Keep RGL's drag placeholder subtle and on-theme. */
+.react-grid-item.react-grid-placeholder {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    opacity: 0.6;
+}
+
+/* Multi-select highlight (edit mode). */
+.rgl-tile.tile-selected {
+    outline: 2px solid #7c4dff;
+    outline-offset: -2px;
+    border-radius: 10px;
+}
+
+/* Live drag ghost(s). `valid`/`invalid` mark where the dragged item (or group) would land —
+   green when the drop is clean, red when it'd be rejected. `displaced` marks where a tile the
+   swap would push gets pushed to (green, fainter fill so it reads as a destination, not your tile). */
+.drag-ghost {
+    position: fixed;
+    z-index: 1245;
+    border-radius: 8px;
+    border-width: 2px;
+    border-style: dashed;
+    pointer-events: none;
+    transition: border-color 0.1s ease, background-color 0.1s ease;
+}
+.drag-ghost.valid {
+    border-color: #4caf50;
+    background: rgba(76, 175, 80, 0.14);
+}
+.drag-ghost.invalid {
+    border-color: #e53935;
+    background: rgba(229, 57, 53, 0.14);
+}
+.drag-ghost.displaced {
+    border-color: #4caf50;
+    background: rgba(76, 175, 80, 0.07);
+}
+
+/* Rubber-band selection rectangle (fixed = viewport coords, matching clientX/Y). */
+.marquee-rect {
+    position: fixed;
+    z-index: 1240;
+    border: 1px solid #7c4dff;
+    background: rgba(124, 77, 255, 0.15);
+    border-radius: 2px;
+    pointer-events: none;
+}
+
+/* Selection check badge — pinned to the tile corner, out of the flex fill flow. */
+.rgl-tile > .tile-select-badge {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    z-index: 5;
+    width: 20px;
+    height: 20px;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    line-height: 1;
+    color: #fff;
+    background: #7c4dff;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+}

@@ -23,6 +23,17 @@ export default defineConfig({
         // Expose the root version to the frontend code
         'import.meta.env.APP_VERSION': JSON.stringify(rootVersion),
     },
+    optimizeDeps: {
+        // react-grid-layout bundles react-draggable, whose log() helper reads
+        // process.env.DRAGGABLE_DEBUG. `process` is undefined in the browser, so any
+        // drag/resize start throws ReferenceError. Vite's top-level `define` does NOT
+        // reach pre-bundled deps, so define it away in the dep optimizer's esbuild pass.
+        esbuildOptions: {
+            define: {
+                'process.env.DRAGGABLE_DEBUG': 'false',
+            },
+        },
+    },
     // build: {
     //     rollupOptions: {
     //         output: {
