@@ -19,8 +19,8 @@
   "display": "standalone",
   "dir": "auto",
   "lang": "en-US",
-  "name": "Lab Dash",
-  "short_name": "Lab Dash",
+  "name": "Lab Drop",
+  "short_name": "Lab Drop",
   "start_url": "/",
   "description": "Management console for your homelab services"
 }

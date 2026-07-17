@@ -113,7 +113,7 @@ export const VersionModal = ({ open, handleClose }: VersionModalProps) => {
 
             // Fetch all releases using fetch API
             const response = await fetch(
-                'https://api.github.com/repos/anthonygress/lab-dash/releases',
+                'https://api.github.com/repos/plongitudes/lab-drop/releases',
                 {
                     method: 'GET',
                     credentials: 'omit' // Explicitly omit credentials

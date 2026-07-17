@@ -178,14 +178,14 @@ export const SetupModal: React.FC<SetupModalProps> = ({ open, onComplete }) => {
 
     const setupSlides: SetupSlide[] = [
         {
-            title: 'Welcome to Lab Dash',
+            title: 'Welcome to Lab Drop',
             content: (
                 <Box sx={styles.vcenter} p={2}>
                     <Typography variant='h6' gutterBottom align='center'>
                         Your Personal Dashboard
                     </Typography>
                     <Typography paragraph align='center'>
-                        Welcome to Lab Dash, a customizable dashboard for your lab environment.
+                        Welcome to Lab Drop, a customizable dashboard for your lab environment.
                         This wizard will help you set up your system and get started.
                     </Typography>
                     <Typography align='center'>
@@ -202,7 +202,7 @@ export const SetupModal: React.FC<SetupModalProps> = ({ open, onComplete }) => {
                         Powerful Dashboard Tools
                     </Typography>
                     <Typography paragraph align='center'>
-                        Lab Dash features a customizable grid layout where you can add various widgets:
+                        Lab Drop features a customizable grid layout where you can add various widgets:
                     </Typography>
                     <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'flex-start', pl: 4 }}>
                         <Typography>• Links to your tools/services</Typography>

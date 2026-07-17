@@ -388,8 +388,8 @@ export const SystemMonitorWidget = ({ config, editMode }: SystemMonitorWidgetPro
         } catch (err: any) {
             setIsLoading(false);
             // Handle API rate limit errors
-            if (err?.response?.status === 429 && err?.response?.data?.error_source === 'labdash_api') {
-                console.error(`Lab-Dash API rate limit: ${err.response?.data?.message}`);
+            if (err?.response?.status === 429 && err?.response?.data?.error_source === 'labdrop_api') {
+                console.error(`Lab-Drop API rate limit: ${err.response?.data?.message}`);
                 setErrorMessage(`API Rate limit: ${err.response?.data?.message}`);
             } else if (err?.response?.status >= 400) {
                 // Handle other API errors

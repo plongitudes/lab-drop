@@ -10,7 +10,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { nanoid } from 'nanoid';
 import React, { useEffect, useState } from 'react';
-import { FaEdit, FaHeart, FaInfoCircle, FaSync } from 'react-icons/fa';
+import { FaEdit, FaInfoCircle, FaSync } from 'react-icons/fa';
 import { FaArrowRightFromBracket, FaGear, FaHouse, FaTrashCan, FaUser } from 'react-icons/fa6';
 import { PiGlobeSimple, PiGlobeSimpleX } from 'react-icons/pi';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
@@ -356,7 +356,7 @@ export const ResponsiveAppBar = ({ children }: Props) => {
                                     }}
                                     key={`app-title-${config?.title}-${nanoid()}`}
                                 >
-                                    {config?.title || 'Lab Dash'}
+                                    {config?.title || 'Lab Drop'}
                                 </Typography>
                                 {/* Mobile */}
                                 <Logo sx={{ display: { xs: 'flex', md: 'none' }, mr: 1 }} />
@@ -379,7 +379,7 @@ export const ResponsiveAppBar = ({ children }: Props) => {
                                     }}
                                     key={`app-title-mobile-${config?.title}-${nanoid()}`}
                                 >
-                                    {config?.title || 'Lab Dash'}
+                                    {config?.title || 'Lab Drop'}
                                 </Typography>
                             </Box>
                         </Link>
@@ -676,25 +676,6 @@ export const ResponsiveAppBar = ({ children }: Props) => {
                                                 </ListItem>
                                             </NavLink>
                                         )}
-
-                                        {/* Donate Option */}
-                                        <ListItem disablePadding>
-                                            <ListItemButton
-                                                onClick={() => {
-                                                    handleCloseDrawer();
-                                                    window.open('https://buymeacoffee.com/anthonygress', '_blank', 'noopener,noreferrer');
-                                                }}
-                                            >
-                                                <ListItemIcon>
-                                                    <FaHeart style={{ color: 'red', fontSize: 22 }} />
-                                                </ListItemIcon>
-                                                <ListItemText primary={'Donate'} secondary={'Support this project'} slotProps={{
-                                                    secondary: {
-                                                        color: 'text.primary'
-                                                    }
-                                                }}/>
-                                            </ListItemButton>
-                                        </ListItem>
 
                                         {/* Update Available Item */}
                                         {updateAvailable && (

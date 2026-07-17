@@ -12,7 +12,7 @@ This is an open-source user interface designed to be your internally hosted home
 
 
 # Features
-Lab Dash features a customizable grid layout where you can add various widgets:
+Lab Drop features a customizable grid layout where you can add various widgets:
 - Shortcuts to your tools/services
 - System information
 - Service health checks
@@ -37,34 +37,38 @@ This only requires docker to be installed. [Install Docker](https://docs.docker.
 ```yaml
 ---
 services:
-  lab-dash:
-      container_name: lab-dash
-      image: ghcr.io/anthonygress/lab-dash:latest
-      privileged: true
-      #network_mode: host # for monitoring network usage stats. run `sudo ufw allow 2022/tcp` on ubuntu to allow access through firewall
-      ports:
-        - 2022:2022
-      environment:
-        # SECRET is optional. If omitted, a random per-install secret is generated
-        # and persisted to the config volume (/config/.secret) on first run.
-        # Only set it to manage the key yourself (e.g. `openssl rand -base64 32`).
-        # Do NOT reuse a placeholder value — a shared secret defeats the encryption.
-        # - SECRET=CHANGE_ME_TO_A_RANDOM_VALUE
-      volumes:
-        - /sys:/sys:ro
-        - /docker/lab-dash/config:/config
-        - /docker/lab-dash/uploads:/app/public/uploads
-        - /var/run/docker.sock:/var/run/docker.sock
-      restart: unless-stopped
+  lab-drop:
+    container_name: lab-drop
+    image: ghcr.io/plongitudes/lab-drop:latest
+    # privileged + network_mode: host are only needed for network-usage stats.
+    #privileged: true
+    #network_mode: host   # then e.g. `sudo ufw allow 2022/tcp` on Ubuntu
+    ports:
+      - 2022:2022
+    environment:
+      # Run the app as this uid:gid (defaults = unraid's nobody:users).
+      # On a plain Linux host set your own, e.g. PUID=1000 PGID=1000.
+      - PUID=99
+      - PGID=100
+      # SECRET is optional. If omitted, a random per-install secret is generated
+      # and persisted to the config volume (/config/.secret) on first run.
+      # Only set it to manage the key yourself (e.g. `openssl rand -base64 32`).
+      # - SECRET=CHANGE_ME_TO_A_RANDOM_VALUE
+    volumes:
+      - ./config:/config
+      - ./uploads:/app/public/uploads
+      # Optional: read-only /sys for temperature/sensor readings.
+      - /sys:/sys:ro
+    restart: unless-stopped
 ```
 
 # Usage
-Lab Dash can aslo be accessed from any web browser via 
+Lab Drop can aslo be accessed from any web browser via 
 - `http://localhost:2022` on the device running the container
 - `192.168.x.x:2022` on local network  
 - `www.your-homepage.com` using your custom domain name
 
-Lab Dash can also be installed as an app on your computer/phone as a PWA (Progressive Web App):
+Lab Drop can also be installed as an app on your computer/phone as a PWA (Progressive Web App):
 - Using Google Chrome on Mac/Windows/Android/Linux
 - Using Safari on iOS/iPad OS via the share menu > add to homscreen
   
@@ -72,7 +76,7 @@ Lab Dash can also be installed as an app on your computer/phone as a PWA (Progre
 
 
 > [!IMPORTANT]  
-> You should assign a static IP address for you server so any LAN/WAN device can access the Lab Dash instance.
+> You should assign a static IP address for you server so any LAN/WAN device can access the Lab Drop instance.
 
 Simply copy/download the [docker-compose.yml](docker-compose.yml) or add it to an existing docker-compose file.
 
@@ -98,7 +102,7 @@ npm run dev
 # Updating
 ### Portainer
 - Navigate to stacks
-- Click on the `lab-dash` stack
+- Click on the `lab-drop` stack
 - Click Editor tab at the top
 - Click Update the stack
 - Enable Re-pull image and redploy toggle
@@ -111,7 +115,7 @@ npm run dev
 - `docker compose up -d`
 
 # Contributing
-Contributions to Lab Dash are welcome! Please follow these guidelines:
+Contributions to Lab Drop are welcome! Please follow these guidelines:
 
 - **One feature per PR** - Keep pull requests focused on a single feature or fix
 - **Review AI-generated code** - If using AI tools, all code must be thoroughly reviewed and tested before submitting

@@ -189,7 +189,7 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ config }) => {
             setIsLoading(false);
 
             // Handle specific error types
-            if (err?.response?.status === 429 && err?.response?.data?.error_source === 'labdash_api') {
+            if (err?.response?.status === 429 && err?.response?.data?.error_source === 'labdrop_api') {
                 setErrorMessage(`API Rate limit: ${err.response?.data?.message}`);
             } else if (err?.response?.status === 500) {
                 // Handle 500 errors specifically - likely from Open-Meteo API

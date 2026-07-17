@@ -298,9 +298,9 @@ export const PiholeWidget = (props: { config?: PiholeWidgetConfig; id?: string }
                     return; // Exit without setting error state
                 } else if (err.response?.status === 429) {
                     // Check if this is a rate limit from our backend API
-                    if (err.response?.data?.error_source === 'labdash_api') {
+                    if (err.response?.data?.error_source === 'labdrop_api') {
                         setAuthFailed(true);
-                        setError(`Lab-Dash API rate limit exceeded: ${err.response?.data?.message}`);
+                        setError(`Lab-Drop API rate limit exceeded: ${err.response?.data?.message}`);
                     } else {
                         // This is a rate limit from Pi-hole itself
                         setAuthFailed(true);
@@ -686,9 +686,9 @@ export const PiholeWidget = (props: { config?: PiholeWidgetConfig; id?: string }
                 setError('Authentication failed. Please check your Pi-hole credentials in widget settings.');
             } else if (err.response?.status === 429) {
                 // Check if this is a rate limit from our backend API
-                if (err.response?.data?.error_source === 'labdash_api') {
+                if (err.response?.data?.error_source === 'labdrop_api') {
                     setAuthFailed(true);
-                    setError(`Lab-Dash API rate limit exceeded: ${err.response?.data?.message}`);
+                    setError(`Lab-Drop API rate limit exceeded: ${err.response?.data?.message}`);
                 } else {
                     // This is a rate limit from Pi-hole itself
                     setAuthFailed(true);
@@ -753,9 +753,9 @@ export const PiholeWidget = (props: { config?: PiholeWidgetConfig; id?: string }
                 setError('Authentication failed. Please check your Pi-hole credentials in widget settings.');
             } else if (err.response?.status === 429) {
                 // Check if this is a rate limit from our backend API
-                if (err.response?.data?.error_source === 'labdash_api') {
+                if (err.response?.data?.error_source === 'labdrop_api') {
                     setAuthFailed(true);
-                    setError(`Lab-Dash API rate limit exceeded: ${err.response?.data?.message}`);
+                    setError(`Lab-Drop API rate limit exceeded: ${err.response?.data?.message}`);
                 } else {
                     // This is a rate limit from Pi-hole itself
                     setAuthFailed(true);

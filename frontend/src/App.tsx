@@ -62,7 +62,7 @@ export const App = () => {
         if (config?.title) {
             document.title = config.title;
         } else {
-            document.title = 'Lab Dash';
+            document.title = 'Lab Drop';
         }
     }, [config?.title]);
 

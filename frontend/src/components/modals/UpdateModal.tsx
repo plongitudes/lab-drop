@@ -94,7 +94,7 @@ export const UpdateModal = ({ open, handleClose, latestVersion, isAdmin }: Updat
 
             // Fetch all releases using fetch API instead of axios
             const response = await fetch(
-                'https://api.github.com/repos/anthonygress/lab-dash/releases',
+                'https://api.github.com/repos/plongitudes/lab-drop/releases',
                 {
                     method: 'GET',
                     credentials: 'omit' // Explicitly omit credentials
@@ -243,7 +243,7 @@ export const UpdateModal = ({ open, handleClose, latestVersion, isAdmin }: Updat
                             <Button
                                 variant='contained'
                                 onClick={() => {
-                                    window.open('https://github.com/AnthonyGress/lab-dash/blob/main/README.md#updating', '_blank');
+                                    window.open('https://github.com/plongitudes/lab-drop/blob/main/README.md#updating', '_blank');
                                     handleClose();
                                 }}
                             >

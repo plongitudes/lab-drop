@@ -578,7 +578,7 @@ configRoute.get('/', async (req: Request, res: Response): Promise<void> => {
 configRoute.get('/export', [authenticateToken, requireAdmin], async (_req: Request, res: Response): Promise<void> => {
     try {
         const config = loadConfig();
-        const fileName = `lab-dash-backup-${new Date().toISOString().slice(0, 10)}.json`;
+        const fileName = `lab-drop-backup-${new Date().toISOString().slice(0, 10)}.json`;
 
         // Set headers to force download
         res.setHeader('Content-Type', 'application/json');

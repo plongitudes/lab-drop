@@ -112,7 +112,7 @@ systemRoute.post('/clean-background', [authenticateToken, requireAdmin], (req: R
 systemRoute.post('/update-container', [authenticateToken, requireAdmin], async (req: Request, res: Response) => {
     try {
         // Execute Docker commands
-        await execAsync('docker pull ghcr.io/anthonygress/lab-dash:latest');
+        await execAsync('docker pull ghcr.io/plongitudes/lab-drop:latest');
 
         // Get the current container ID
         const { stdout: containerId } = await execAsync('cat /proc/self/cgroup | grep docker | head -n 1 | sed "s/.*\\///" | cut -c 1-12');

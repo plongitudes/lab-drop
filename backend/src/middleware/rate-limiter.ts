@@ -22,7 +22,7 @@ export const generalLimiter = rateLimit({
         res.status(429).json({
             success: false,
             message: 'Too many requests from this general IP, please try again after 5 minutes',
-            error_source: 'labdash_api'
+            error_source: 'labdrop_api'
         });
     }
 });
@@ -38,7 +38,7 @@ export const authLimiter = rateLimit({
         res.status(429).json({
             success: false,
             message: 'Too many authentication attempts, please try again after 5 minutes',
-            error_source: 'labdash_api'
+            error_source: 'labdrop_api'
         });
     }
 });
@@ -54,7 +54,7 @@ export const apiLimiter = rateLimit({
         res.status(429).json({
             success: false,
             message: 'Too many API requests, please try again after 1 minutes',
-            error_source: 'labdash_api'
+            error_source: 'labdrop_api'
         });
     }
 });
@@ -70,7 +70,7 @@ export const healthLimiter = rateLimit({
         res.status(429).json({
             success: false,
             message: 'Health check rate limit exceeded, please try again later',
-            error_source: 'labdash_api'
+            error_source: 'labdrop_api'
         });
     }
 });
@@ -86,7 +86,7 @@ export const weatherApiLimiter = rateLimit({
         res.status(429).json({
             success: false,
             message: 'Weather API rate limit exceeded, please try again later',
-            error_source: 'labdash_api'
+            error_source: 'labdrop_api'
         });
     }
 });
@@ -102,7 +102,7 @@ export const timezoneApiLimiter = rateLimit({
         res.status(429).json({
             success: false,
             message: 'Timezone API rate limit exceeded, please try again later',
-            error_source: 'labdash_api'
+            error_source: 'labdrop_api'
         });
     }
 });
@@ -118,7 +118,7 @@ export const torrentApiLimiter = rateLimit({
         res.status(429).json({
             success: false,
             message: 'Torrent client API rate limit exceeded, please try again later',
-            error_source: 'labdash_api'
+            error_source: 'labdrop_api'
         });
     }
 });
@@ -134,7 +134,7 @@ export const systemMonitorLimiter = rateLimit({
         res.status(429).json({
             success: false,
             message: 'System monitor API rate limit exceeded, please try again later',
-            error_source: 'labdash_api'
+            error_source: 'labdrop_api'
         });
     }
 });

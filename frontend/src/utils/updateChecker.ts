@@ -34,7 +34,7 @@ export const fetchLatestRelease = async (): Promise<GitHubRelease | null> => {
     try {
         // Use fetch instead of axios to have more control over CORS and credentials
         const response = await fetch(
-            'https://api.github.com/repos/anthonygress/lab-dash/releases/latest',
+            'https://api.github.com/repos/plongitudes/lab-drop/releases/latest',
             {
                 method: 'GET',
                 credentials: 'omit' // Explicitly omit credentials
