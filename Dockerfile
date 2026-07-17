@@ -35,9 +35,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 EXPOSE 2022
 
-# Install runtime dependencies and Python 3 for ARM
+# Install runtime dependencies and Python 3 for ARM.
+# gosu is used by the entrypoint to drop from root to the PUID/PGID user.
 RUN apt-get update && \
-    apt-get install -y iputils-ping lm-sensors ca-certificates && \
+    apt-get install -y iputils-ping lm-sensors ca-certificates gosu && \
     ARCH=$(uname -m) && \
     echo "Detected architecture: $ARCH" && \
     if [ "$ARCH" = "armv7l" ] || [ "$ARCH" = "armhf" ] || [ "$ARCH" = "arm" ]; then \
@@ -50,4 +51,10 @@ COPY --from=backend-build /usr/src/app/dist/index.js ./
 COPY --from=backend-build /usr/src/app/dist/package.json ./
 COPY --from=frontend-build /usr/src/app/dist ./public
 RUN npm i --omit-dev --omit-optional
+
+# Non-root at runtime: the entrypoint reconciles /config + uploads ownership to
+# PUID/PGID (default 99:100) then drops privileges via gosu before running node.
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT [ "/entrypoint.sh" ]
 CMD [ "node", "index.js" ]

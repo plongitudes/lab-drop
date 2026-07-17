@@ -2,25 +2,33 @@
 services:
   lab-drop:
     container_name: lab-drop
-    # Built locally from this repo (no registry). Run `docker compose build` or
-    # `docker compose up --build`. The Dockerfile produces the combined image.
-    image: lab-drop:latest
-    build: .
-    privileged: true
-    #network_mode: host # for monitoring network usage stats. run `sudo ufw allow 2022/tcp` on ubuntu to allow access through firewall
+    # Pull the published multi-arch image from GHCR (recommended).
+    image: ghcr.io/plongitudes/lab-drop:latest
+    # To build locally from this repo instead of pulling, uncomment `build: .`
+    # and run `docker compose up -d --build`.
+    # build: .
+
+    # privileged + network_mode: host are ONLY needed for network-usage
+    # monitoring stats. Leave them off for the normal dashboard.
+    #privileged: true
+    #network_mode: host   # then run e.g. `sudo ufw allow 2022/tcp` on Ubuntu
     ports:
       - 2022:2022
     environment:
+      # Run the app as this uid:gid (defaults shown = unraid's nobody:users).
+      # Set to your own user on a plain Linux host, e.g. PUID=1000 PGID=1000,
+      # so bind-mounted config/uploads come out owned by you.
+      - PUID=99
+      - PGID=100
       # SECRET is optional. If omitted, a random per-install secret is generated
       # and persisted to the config volume (/config/.secret) on first run.
-      # Only set it if you want to manage the key yourself (e.g. `openssl rand -base64 32`).
+      # Only set it to manage the key yourself (e.g. `openssl rand -base64 32`).
       # Do NOT reuse a placeholder value — a shared secret defeats the encryption.
       # - SECRET=CHANGE_ME_TO_A_RANDOM_VALUE
     volumes:
+      # Map the host side to wherever you like; the container paths are fixed.
+      - ./config:/config
+      - ./uploads:/app/public/uploads
+      # Optional: read-only /sys for temperature/sensor readings. Remove if unused.
       - /sys:/sys:ro
-      # Point these at existing /docker/lab-dash/* paths instead if you want to
-      # carry over your current config/uploads.
-      - /docker/lab-drop/config:/config
-      - /docker/lab-drop/uploads:/app/public/uploads
-      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
