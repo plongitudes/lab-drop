@@ -8,9 +8,6 @@
 
 This is an open-source user interface designed to be your internally hosted homepage for your homelab/server. 
 
-<img width="1912" alt="Screenshot 2025-05-08 at 8 58 34 PM" src="https://github.com/user-attachments/assets/55ae6a22-33e3-40ab-b1e2-a8deeaa5239b" />
-
-
 # Features
 Lab Drop features a customizable grid layout where you can add various widgets:
 - Shortcuts to your tools/services
