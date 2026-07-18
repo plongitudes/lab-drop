@@ -1,6 +1,6 @@
 {
   "name": "lab-drop",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A homelab dashboard with a free-2D drag-and-drop layout and hardened auth — a fork of lab-dash by Anthony Gress",
   "main": "index.js",
   "scripts": {
