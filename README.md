@@ -1,10 +1,10 @@
 # Lab Drop
 
-> **A fork of [lab-dash](https://github.com/AnthonyGress/lab-dash) by Anthony Gress**, licensed under GPL-3.0.
-> Lab Drop builds on lab-dash with a free-2D drag-and-drop tile layout and a hardened backend
-> (fail-closed secrets, deny-by-default auth on state-changing endpoints, command-injection and
-> path-traversal fixes). All credit for the original project goes to the upstream author and
-> contributors. See [`LICENSE`](./LICENSE) and the upstream repo for history.
+> **A fork of [lab-dash](https://github.com/AnthonyGress/lab-dash) by Anthony Gress**, licensed under GPL-3.0. Lab Drop
+> builds on lab-dash with a free-2D drag-and-drop tile layout and a hardened backend (fail-closed secrets,
+> deny-by-default auth on state-changing endpoints, command-injection and path-traversal fixes). All credit for the
+> original project goes to the upstream author and contributors. See [`LICENSE`](./LICENSE) and the upstream repo for
+> history.
 
 This is an open-source user interface designed to be your internally hosted homepage for your homelab/server. 
 
@@ -111,6 +111,74 @@ npm run dev
 - `docker compose pull`
 - `docker compose up -d`
 
+# FAQ
+
+### Can I import my existing lab-dash config into Lab Drop?
+
+**Mostly yes**, with two caveats. Lab Drop was forked from **lab-dash `v1.3.7`**, so a config exported from **lab-dash
+v1.3.7 or earlier will definitively import**. Newer lab-dash releases may include widgets or config fields added after
+the fork that Lab Drop doesn't support. If you've exported your config from lab-dash, just keep that file on hand and
+try uploading it as a restore file in lab-drop.
+
+**What transfers cleanly:** your dashboard layout auto-migrates. Lab Drop replaces lab-dash's grid with a free-2D
+drag-and-drop engine, and a built-in migration replays your old layout into explicit coordinates — freezing the exact
+visual arrangement, so the dashboard looks identical after import. Widget definitions, titles, background, and custom
+search providers come across too.
+
+**The credential caveat:** service API keys and passwords are stored AES-256-CBC-encrypted with each install's secret
+key. Lab Drop generates its own key, so by default those encrypted fields won't decrypt on import — they arrive blank
+and **you re-enter each service's credentials once**. The import itself succeeds; only the secrets are affected.
+
+**To carry credentials over** instead of re-entering them, point Lab Drop at the *same* secret your lab-dash install
+used, *before* importing:
+
+1. Find your lab-dash secret:
+   - If you set `SECRET` explicitly (env var / compose), use that value.
+   - If lab-dash auto-generated it, it's persisted in the config volume — e.g.
+     `docker exec <lab-dash> cat /config/.secret`.
+2. Set that value as Lab Drop's `SECRET` (env var or compose `environment:`) and start the container.
+3. Import the config — the encrypted credentials now decrypt correctly.
+
+> **Exception:** if your lab-dash relied on the old built-in default secret, this won't work — Lab Drop deliberately
+> rejects that value (a fail-closed security fix), so you'll need to re-enter credentials in that case.
+
+**Note:** importing requires an admin login, so set up your Lab Drop admin account first.
+
+### How do I recover a lost or forgotten password?
+
+There's only one real route, and it involves having access to the container that's running the dashboard. Accounts live
+in `users.json` (wherever the config volume is mounted) with bcrypt-hashed passwords, so a reset involves writing a new
+hash to `users.json`.
+
+1. **Find the config path on the host** (skip if you already know it):
+   ```bash
+   docker inspect lab-drop --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{"\n"}}{{end}}'
+   ```
+   Use the mount ending in `-> /config`; `users.json` lives there.
+
+2. **Generate a bcrypt hash for the new password** (`bcrypt` ships inside the container):
+   ```bash
+   docker exec lab-drop node -e "console.log(require('bcrypt').hashSync('YOUR_NEW_PASSWORD', 10))"
+   ```
+   Copy the `$2b$10$...` string that the above command outputs.
+
+3. **Edit `users.json`** in the config dir. Replace the target account's `passwordHash` with the
+   string from step 2, leaving `username` and `role` as-is. If the file is empty (`[]`), add a full
+   admin record instead:
+   ```json
+   [
+     { "username": "admin", "passwordHash": "$2b$10$...paste-here...", "refreshTokens": [], "role": "admin" }
+   ]
+   ```
+
+4. **Restart and log in:**
+   ```bash
+   docker restart lab-drop
+   ```
+
+This touches only the user account — your dashboard layout (`config.json`), encryption key (`.secret`), and saved
+service credentials are left untouched.
+
 # Contributing
 Contributions to Lab Drop are welcome! Please follow these guidelines:
 
@@ -119,4 +187,5 @@ Contributions to Lab Drop are welcome! Please follow these guidelines:
 - **Maintain consistency** - New code must align with the app's existing style, theme, and overall user experience
 
 # Disclaimer
-This code is provided for informational and educational purposes only. I am not associated with any of the services/applications mentioned in this project.
+This code is provided for informational and educational purposes only. I am not associated with any of the
+services/applications mentioned in this project.
