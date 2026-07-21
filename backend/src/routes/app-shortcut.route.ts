@@ -39,9 +39,10 @@ const storage = multer.diskStorage({
     }
 });
 
-// Allow only raster image types. SVG is intentionally excluded: an uploaded
-// SVG/HTML served from the app origin is a stored-XSS vector.
-const ALLOWED_IMAGE_MIMES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+// Allowed image types. SVG is permitted; its stored-XSS risk is contained by
+// serving /uploads with a locked-down CSP (see index.ts) and only ever rendering
+// icons via <img>, where SVG scripts do not execute.
+const ALLOWED_IMAGE_MIMES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
 
 const upload = multer({
     storage,

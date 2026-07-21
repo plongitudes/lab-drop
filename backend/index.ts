@@ -38,7 +38,16 @@ app.use(generalLimiter);
 // Routes
 app.use('/icon-list', express.static(iconListPath));
 app.use('/icons', express.static(iconsPath));
-app.use('/uploads', express.static(UPLOAD_DIRECTORY));
+// User-uploaded files (icons, backgrounds) are served with a locked-down CSP and
+// nosniff so an uploaded SVG can't execute script even if opened directly. Icons
+// are always rendered via <img>, where SVG scripts never run; this header closes
+// a vector (direct navigation to the file's URL).
+app.use('/uploads', express.static(UPLOAD_DIRECTORY, {
+    setHeaders: (res) => {
+        res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+        res.set('X-Content-Type-Options', 'nosniff');
+    }
+}));
 app.use('/api', routes);
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', (req, res) => {

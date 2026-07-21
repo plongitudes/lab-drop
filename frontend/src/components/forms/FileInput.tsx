@@ -18,7 +18,7 @@ type Props = {
 export const FileInput = ({
     name,
     label,
-    accept='image/png, image/jpeg, image/jpg, image/gif, image/webp',
+    accept='image/png, image/jpeg, image/jpg, image/gif, image/webp, image/svg+xml',
     width,
     maxSize = 5 * 1024 * 1024, // 5MB default
     sx
