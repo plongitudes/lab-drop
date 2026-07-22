@@ -69,8 +69,6 @@ Lab Drop can also be installed as an app on your computer/phone as a PWA (Progre
 - Using Google Chrome on Mac/Windows/Android/Linux
 - Using Safari on iOS/iPad OS via the share menu > add to homscreen
   
-<img width="391" alt="Screenshot 2025-03-24 at 12 13 07 AM" src="https://github.com/user-attachments/assets/2b6ec3b4-5cda-4cd0-b8aa-70185477b633" />  
-
 
 > [!IMPORTANT]  
 > You should assign a static IP address for you server so any LAN/WAN device can access the Lab Drop instance.
