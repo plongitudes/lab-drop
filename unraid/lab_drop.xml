@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>Lab Drop</Name>
+  <Repository>ghcr.io/plongitudes/lab-drop:latest</Repository>
+  <Registry>ghcr.io/plongitudes/lab-drop</Registry>
+  <Branch>
+    <Tag>latest</Tag>
+    <TagDescription>Latest stable release</TagDescription>
+  </Branch>
+  <Network>bridge</Network>
+  <WebUI>http://[IP]:[PORT:2022]/</WebUI>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/plongitudes/lab-drop/issues</Support>
+  <Project>https://github.com/plongitudes/lab-drop</Project>
+  <Overview>Lab Drop is a self-hosted homepage for your homelab/server, with a free-2D drag-and-drop tile layout and a hardened backend (fail-closed secrets, deny-by-default auth on state-changing endpoints, command-injection and path-traversal fixes). Runs as a non-root user (PUID/PGID). A fork of lab-dash by Anthony Gress, licensed under GPL-3.0 — all credit for the original project goes to the upstream author and contributors.</Overview>
+  <Beta>False</Beta>
+  <Category>Productivity: Tools: Other: Status:Stable</Category>
+  <ExtraSearchTerms>dashboard homepage homelab server labdrop lab-drop labdash lab-dash</ExtraSearchTerms>
+  <Icon>https://raw.githubusercontent.com/plongitudes/lab-drop/main/frontend/src/assets/gradient_logo.png</Icon>
+  <TemplateURL>https://raw.githubusercontent.com/plongitudes/lab-drop/main/unraid/lab_drop.xml</TemplateURL>
+  <Maintainer>
+    <WebPage>https://github.com/plongitudes</WebPage>
+  </Maintainer>
+  <Requires>Optional: for network-usage monitoring stats, set Privileged and use host networking.</Requires>
+  <Config Name="Web UI Port" Target="2022" Default="2022" Mode="tcp" Description="Container Port: 2022" Type="Port" Display="always-hide" Required="true" Mask="false">2022</Config>
+  <Config Name="Config Path" Target="/config" Default="/mnt/user/appdata/lab-drop/config" Description="Stores users.json, config.json, and the auto-generated .secret" Type="Path" Display="advanced-hide" Required="true" Mask="false">/mnt/user/appdata/lab-drop/config</Config>
+  <Config Name="Uploads Path" Target="/app/public/uploads" Default="/mnt/user/appdata/lab-drop/uploads" Description="Stores uploaded icons and background images" Type="Path" Display="advanced-hide" Required="true" Mask="false">/mnt/user/appdata/lab-drop/uploads</Config>
+  <Config Name="Secret Key" Target="SECRET" Default="" Description="Optional. Leave blank to auto-generate a per-install key (persisted to /config/.secret on first run). Only set it to manage the key yourself, e.g. `openssl rand -base64 32`. Do not reuse a placeholder value." Type="Variable" Display="advanced-hide" Required="false" Mask="true"/>
+  <Config Name="PUID" Target="PUID" Default="99" Description="User ID to run as (Unraid default: 99 = nobody). App files in appdata are owned by this UID." Type="Variable" Display="advanced-hide" Required="true" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Description="Group ID to run as (Unraid default: 100 = users)." Type="Variable" Display="advanced-hide" Required="true" Mask="false">100</Config>
+  <Config Name="System Path (sensors)" Target="/sys" Default="/sys" Mode="ro" Description="Optional, read-only. Enables temperature/sensor readings. Remove if unused." Type="Path" Display="advanced-hide" Required="false" Mask="false">/sys</Config>
+</Container>
